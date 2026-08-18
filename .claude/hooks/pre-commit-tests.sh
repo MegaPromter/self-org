@@ -21,7 +21,9 @@ cd "$CLAUDE_PROJECT_DIR"
 # прогонять нечего — пропускаем, чтобы не блокировать
 # документационные коммиты.
 if [ -f "manage.py" ] || [ -f "pyproject.toml" ]; then
-  python -m pytest -q 2>&1
+  PYBIN="python"
+  if [ -x ".venv/Scripts/python.exe" ]; then PYBIN=".venv/Scripts/python"; fi
+  "$PYBIN" -m pytest -q 2>&1
   STATUS=$?
   if [ $STATUS -ne 0 ]; then
     echo "Тесты не прошли — коммит заблокирован" >&2

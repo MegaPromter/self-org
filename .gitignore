@@ -2,3 +2,12 @@
 # Сами хуки и .claude/settings.json, наоборот, ИДУТ в git:
 # без них слой принуждения при переносе проекта молча исчезнет.
 .claude/task-state.json
+
+# Python и Django — локальное, в git не идёт
+.venv/
+__pycache__/
+*.pyc
+db.sqlite3
+.env
+staticfiles/
+.pytest_cache/

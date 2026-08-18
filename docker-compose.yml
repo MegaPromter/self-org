@@ -1,0 +1,71 @@
+# Полный локальный запуск: сайт + база + планировщик — тот же
+# состав, что будет на сервере. Пароли ниже — ТОЛЬКО для
+# локальной разработки; на сервере всё придёт из .env
+# (см. .env.example), задача развёртывания — отдельная.
+services:
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+             (python manage.py createsuperuser --noinput || true) &&
+             python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment: &app-env
+      POSTGRES_HOST: db
+      POSTGRES_DB: selforg
+      POSTGRES_USER: selforg
+      POSTGRES_PASSWORD: selforg-dev
+      CELERY_BROKER_URL: redis://redis:6379/0
+      DJANGO_SUPERUSER_USERNAME: anton
+      DJANGO_SUPERUSER_PASSWORD: selforg-dev
+      DJANGO_SUPERUSER_EMAIL: admin@managesystems.ru
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build: .
+    command: celery -A config worker -l info
+    volumes:
+      - .:/app
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  beat:
+    build: .
+    command: celery -A config beat -l info
+    volumes:
+      - .:/app
+    environment: *app-env
+    depends_on:
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: selforg
+      POSTGRES_USER: selforg
+      POSTGRES_PASSWORD: selforg-dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U selforg"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  pgdata:
