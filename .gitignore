@@ -11,3 +11,8 @@ db.sqlite3
 .env
 staticfiles/
 .pytest_cache/
+
+# Служебные файлы запусков: расписание Celery Beat и метаданные
+# установки пакета — создаются сами, в git не идут
+celerybeat-schedule*
+*.egg-info/
