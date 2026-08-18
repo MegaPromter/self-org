@@ -29,6 +29,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -X utf8 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check_turn_end.py\"",
+            "timeout": 15,
+            "statusMessage": "Проверка незавершённых шагов (регламент)..."
+          }
+        ]
+      }
     ]
   }
 }
