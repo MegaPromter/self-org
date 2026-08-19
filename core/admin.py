@@ -16,6 +16,7 @@ from .models import (
     Obligation,
     Person,
 )
+from .status import compute_status
 
 admin.site.site_header = "Self-org"
 admin.site.site_title = "Self-org"
@@ -65,9 +66,15 @@ class PersonAdmin(admin.ModelAdmin):
     inlines = [FactInline]
 
 
+def _short_number(value):
+    """Число без хвостовых нулей: 400.00 → «400», 12.50 → «12.5»."""
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return text
+
+
 @admin.register(Obligation)
 class ObligationAdmin(admin.ModelAdmin):
-    list_display = ["name", "rule_kind", "item", "person", "owner"]
+    list_display = ["name", "state", "left", "rule_kind", "item", "owner"]
     list_filter = ["rule_kind", "is_private", "owner"]
     search_fields = ["name", "item__name", "person__name"]
     inlines = [CompletionInline, FactInline]
@@ -96,6 +103,30 @@ class ObligationAdmin(admin.ModelAdmin):
         ),
         ("Семья", {"fields": ["owner", "assignee", "is_private"]}),
     ]
+
+    @admin.display(description="состояние")
+    def state(self, obj):
+        статус = compute_status(obj)
+        текст = str(статус.state)
+        if статус.is_estimate:
+            текст += " (по оценке)"
+        if статус.message:
+            текст += f" — {статус.message}"
+        return текст
+
+    @admin.display(description="осталось")
+    def left(self, obj):
+        статус = compute_status(obj)
+        части = []
+        if статус.meter_left is not None:
+            префикс = "≈ " if статус.is_estimate else ""
+            части.append(
+                f"{префикс}{_short_number(статус.meter_left)}"
+                f" {статус.meter_unit}"
+            )
+        if статус.days_left is not None:
+            части.append(f"{статус.days_left} дн.")
+        return " · ".join(части) or "—"
 
 
 @admin.register(NotificationProfile)

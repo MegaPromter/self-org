@@ -166,6 +166,11 @@ class Obligation(models.Model):
         YEARS = "years", "лет"
 
     name = models.CharField("название", max_length=200)
+    # От даты создания отсчитывается разовый срок, пока нет
+    # выполнений (правило 7 заметки «Расчёт сроков и состояний»).
+    created = models.DateField(
+        "создано", default=datetime.date.today, editable=False
+    )
     item = models.ForeignKey(
         Item,
         on_delete=models.CASCADE,
