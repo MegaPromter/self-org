@@ -8,6 +8,8 @@
 import os
 from pathlib import Path
 
+from celery.schedules import crontab
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # На сервере ключ обязан прийти из окружения — значение ниже
@@ -112,3 +114,13 @@ CELERY_BROKER_URL = os.environ.get(
     "CELERY_BROKER_URL", "redis://localhost:6379/0"
 )
 CELERY_TIMEZONE = TIME_ZONE
+
+# Прогоны планировщика — раз в 4 часа по фиксированным часам:
+# один приходится ровно на конец тихих часов по умолчанию (09:00),
+# чтобы накопившееся за ночь уходило утром, а не к обеду.
+CELERY_BEAT_SCHEDULE = {
+    "проверка-сроков": {
+        "task": "core.tasks.check_due",
+        "schedule": crontab(minute=0, hour="1,5,9,13,17,21"),
+    },
+}

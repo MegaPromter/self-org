@@ -19,6 +19,7 @@ from django.contrib.contenttypes.fields import (
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class Fact(models.Model):
@@ -392,3 +393,67 @@ class NotificationProfile(models.Model):
 
     def __str__(self):
         return f"Уведомления: {self.user}"
+
+
+class Notification(models.Model):
+    """Уведомление — запись журнала напоминаний.
+
+    Записи создаёт планировщик (`core/planner.py`), отправляет
+    канал (Telegram — следующая задача). Журнал нужен, чтобы
+    не напоминать дважды об одном и том же и чтобы тихие часы
+    могли придержать отправку до утра.
+    """
+
+    class Kind(models.TextChoices):
+        SOON = "soon", "скоро срок"
+        OVERDUE = "overdue", "просрочено"
+        READING = "reading", "введите показания"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "ожидает"
+        SENT = "sent", "отправлено"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        verbose_name="получатель",
+    )
+    kind = models.CharField("вид", max_length=10, choices=Kind.choices)
+    obligation = models.ForeignKey(
+        Obligation,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+        verbose_name="обязательство",
+    )
+    meter = models.ForeignKey(
+        Meter,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+        verbose_name="счётчик",
+    )
+    text = models.TextField("текст")
+    created_at = models.DateTimeField("создано", default=timezone.now)
+    not_before = models.DateTimeField(
+        "не раньше",
+        help_text="Отправка не раньше этого времени — конец тихих часов.",
+    )
+    status = models.CharField(
+        "статус",
+        max_length=10,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    sent_at = models.DateTimeField("отправлено", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "уведомление"
+        verbose_name_plural = "уведомления"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return self.text

@@ -147,6 +147,9 @@ class ObligationStatus:
     fraction: Decimal | None = None  # пройденная доля интервала
     is_estimate: bool = False  # счётчиковая часть — по оценке
     needs_reading: bool = False
+    # Начало текущего цикла (последнее выполнение, годовщина…) —
+    # по нему планировщик понимает, напоминал ли уже в этом цикле.
+    cycle_start: datetime.date | None = None
     message: str = ""
 
 
@@ -216,6 +219,7 @@ def compute_status(
             заметки.append("отметьте, когда делалось в последний раз")
         else:
             start, due = часть
+            итог.cycle_start = start
             итог.due_date = due
             итог.days_left = (due - today).days
             доли.append(_fraction(start, due, today))
@@ -226,6 +230,8 @@ def compute_status(
         if last is None:
             заметки.append("отметьте, когда делалось в последний раз")
         else:
+            if итог.cycle_start is None:
+                итог.cycle_start = last.date
             # Точка отсчёта — показание при выполнении; не записано —
             # оценка на ту дату (правило 6).
             основа = last.meter_value

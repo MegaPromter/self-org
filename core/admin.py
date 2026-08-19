@@ -12,6 +12,7 @@ from .models import (
     Item,
     Meter,
     MeterReading,
+    Notification,
     NotificationProfile,
     Obligation,
     Person,
@@ -137,3 +138,23 @@ class NotificationProfileAdmin(admin.ModelAdmin):
         "quiet_hours_start",
         "quiet_hours_end",
     ]
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    """Журнал уведомлений: записи создаёт планировщик, не человек."""
+
+    list_display = [
+        "created_at",
+        "user",
+        "kind",
+        "text",
+        "status",
+        "sent_at",
+    ]
+    list_filter = ["kind", "status", "user"]
+    search_fields = ["text"]
+    date_hierarchy = "created_at"
+
+    def has_add_permission(self, request):
+        return False  # журнал пишет планировщик — руками не добавляют
