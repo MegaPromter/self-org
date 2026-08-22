@@ -12,6 +12,22 @@ from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Локальные настройки из файла .env рядом с проектом: чтобы при
+# простом запуске не вписывать токен бота в командную строку каждый
+# раз. Переменные самого окружения (Docker, сервер) важнее файла.
+def _прочитать_env(путь):
+    if not путь.exists():
+        return
+    for строка in путь.read_text(encoding="utf-8").splitlines():
+        строка = строка.strip()
+        if not строка or строка.startswith("#") or "=" not in строка:
+            continue
+        имя, значение = строка.split("=", 1)
+        os.environ.setdefault(имя.strip(), значение.strip().strip("\"'"))
+
+
+_прочитать_env(BASE_DIR / ".env")
+
 # На сервере ключ обязан прийти из окружения — значение ниже
 # годится только для локальной разработки.
 SECRET_KEY = os.environ.get(
