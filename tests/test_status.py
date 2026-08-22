@@ -13,7 +13,10 @@ from django.contrib.auth.models import User
 from core.models import Completion, Item, Meter, MeterReading, Obligation
 from core.status import State, compute_status, estimate_meter, needs_reading
 
-СЕГОДНЯ = datetime.date(2026, 8, 19)
+# Дата настоящая, а не выдуманная: колонки админки считают
+# состояние от сегодняшнего дня и с фиксированной датой разошлись
+# бы через несколько суток после написания теста.
+СЕГОДНЯ = datetime.date.today()
 
 
 def дней_назад(n):
@@ -82,18 +85,19 @@ def test_maslo_skoro_po_ocenke(масло):
 
 
 def test_ezhegodnoe_skoro(антон):
+    день_рождения = СЕГОДНЯ + datetime.timedelta(days=26)
     сестра = Obligation.objects.create(
         name="Поздравить сестру",
         rule_kind=Obligation.RuleKind.TIME,
         time_kind=Obligation.TimeKind.ANNUAL,
-        annual_month=9,
-        annual_day=14,
+        annual_month=день_рождения.month,
+        annual_day=день_рождения.day,
         owner=антон,
         created=СЕГОДНЯ,
     )
     статус = compute_status(сестра, СЕГОДНЯ)
     assert статус.state is State.SOON  # пройдено ~93 % года
-    assert статус.due_date == datetime.date(2026, 9, 14)
+    assert статус.due_date == день_рождения
     assert статус.days_left == 26
 
 
