@@ -10,6 +10,7 @@ from django.utils.html import format_html
 
 from .bot_actions import make_link_code
 from .models import (
+    Category,
     Completion,
     Fact,
     Item,
@@ -48,9 +49,16 @@ class CompletionInline(admin.TabularInline):
     extra = 0
 
 
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ["name", "order"]
+    list_editable = ["order"]  # порядок плашек на главном экране
+
+
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ["name"]
+    list_display = ["name", "category"]
+    list_filter = ["category"]
     search_fields = ["name"]
     inlines = [MeterInline, FactInline]
 
@@ -72,12 +80,20 @@ class PersonAdmin(admin.ModelAdmin):
 
 @admin.register(Obligation)
 class ObligationAdmin(admin.ModelAdmin):
-    list_display = ["name", "state", "left", "rule_kind", "item", "owner"]
-    list_filter = ["rule_kind", "is_private", "owner"]
+    list_display = [
+        "name",
+        "state",
+        "left",
+        "category_shown",
+        "rule_kind",
+        "item",
+        "owner",
+    ]
+    list_filter = ["category", "rule_kind", "is_private", "owner"]
     search_fields = ["name", "item__name", "person__name"]
     inlines = [CompletionInline, FactInline]
     fieldsets = [
-        (None, {"fields": ["name", "item", "person", "notes"]}),
+        (None, {"fields": ["name", "category", "item", "person", "notes"]}),
         (
             "Правило срока",
             {
@@ -107,6 +123,11 @@ class ObligationAdmin(admin.ModelAdmin):
         ),
         ("Семья", {"fields": ["owner", "assignee", "is_private"]}),
     ]
+
+    @admin.display(description="раздел")
+    def category_shown(self, obj):
+        """Раздел с учётом наследования от предмета."""
+        return obj.effective_category or "—"
 
     @admin.display(description="состояние")
     def state(self, obj):

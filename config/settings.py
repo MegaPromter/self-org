@@ -79,6 +79,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+# Вход в систему: не вошёл — своя страница входа, после входа —
+# главный экран, после выхода — снова вход (заметка «Главный экран»).
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/login/"
+
 # База: задан POSTGRES_HOST — работаем с PostgreSQL (Docker,
 # сервер); не задан — локальная SQLite для простого запуска
 # и тестов. Выбор SQLite здесь осознанный и временный: боевая

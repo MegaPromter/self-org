@@ -1,0 +1,120 @@
+{# Общая обёртка экранов: шапка, оформление, сообщения. #}
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Self-org{% endblock %}</title>
+<style>
+  /* Оформление своё и целиком здесь: ничего не тянем из интернета,
+     чтобы экран открывался и без связи с внешним миром. */
+  :root {
+    --фон: #f6f5f2; --лист: #fff; --рамка: #e2e0d9;
+    --текст: #1f1f1d; --серый: #6b6a65;
+    --красный: #c0392b; --жёлтый: #b9770e; --зелёный: #1e8449;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--фон); color: var(--текст);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.45;
+  }
+  .страница { max-width: 46rem; margin: 0 auto; padding: 1rem 0.9rem 3rem; }
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 1rem; border-bottom: 1px solid var(--рамка);
+    padding-bottom: 0.6rem; margin-bottom: 1rem;
+  }
+  header h1 { font-size: 1.15rem; font-weight: 600; margin: 0; }
+  header a, header button.ссылка {
+    color: var(--серый); font-size: 0.85rem; text-decoration: none;
+    background: none; border: none; cursor: pointer; padding: 0;
+  }
+  .карточка {
+    background: var(--лист); border: 1px solid var(--рамка);
+    border-radius: 12px; padding: 0.7rem 0.85rem; margin-bottom: 0.7rem;
+  }
+  .карточка.overdue { border-color: #e6b0aa; }
+  .карточка.soon { border-color: #f0d4a3; }
+  .заголовок { display: flex; justify-content: space-between; gap: 0.5rem; }
+  .имя { font-weight: 600; }
+  .подпись { color: var(--серый); font-size: 0.85rem; margin: 0.1rem 0 0; }
+  .фактура { color: var(--серый); font-size: 0.8rem; margin: 0.35rem 0 0; }
+  .метка {
+    font-size: 0.72rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+    white-space: nowrap; align-self: center;
+  }
+  .метка.overdue { background: #fbeae8; color: var(--красный); }
+  .метка.soon { background: #fdf3e2; color: var(--жёлтый); }
+  .метка.ok { background: #e8f5ee; color: var(--зелёный); }
+  .метка.snoozed, .метка.nodata { background: #eeece7; color: var(--серый); }
+  .полоска {
+    height: 5px; background: #eeece7; border-radius: 3px;
+    margin: 0.5rem 0 0.15rem; overflow: hidden;
+  }
+  .полоска div { height: 5px; border-radius: 3px; }
+  .полоска .overdue { background: var(--красный); }
+  .полоска .soon { background: var(--жёлтый); }
+  .полоска .ok { background: var(--зелёный); }
+  .полоска .snoozed, .полоска .nodata { background: #c9c7c0; }
+  .кнопки {
+    display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;
+    margin-top: 0.5rem;
+  }
+  .кнопки form { display: inline; }
+  button, .кнопка {
+    font: inherit; font-size: 0.85rem; padding: 0.3rem 0.7rem;
+    border: 1px solid #cfcdc6; background: var(--лист); color: var(--текст);
+    border-radius: 8px; cursor: pointer;
+  }
+  button.мелкая { font-size: 0.78rem; padding: 0.2rem 0.5rem; }
+  button:hover { background: #f2f0eb; }
+  button.главная { background: var(--текст); color: #fff; border-color: var(--текст); }
+  input[type="text"], input[type="password"], input[type="number"] {
+    font: inherit; font-size: 0.9rem; padding: 0.35rem 0.5rem;
+    border: 1px solid #cfcdc6; border-radius: 8px; background: var(--лист);
+    color: var(--текст); min-width: 0;
+  }
+  .плашки { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1rem; }
+  .плашка {
+    font-size: 0.85rem; padding: 0.25rem 0.75rem; border-radius: 999px;
+    border: 1px solid #cfcdc6; text-decoration: none; color: var(--текст);
+    background: var(--лист);
+  }
+  .плашка.выбрана { background: var(--текст); color: #fff; border-color: var(--текст); }
+  .плашка .точка { color: var(--красный); }
+  .плашка.выбрана .точка { color: #ff9c8f; }
+  .сообщение {
+    border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.7rem;
+    font-size: 0.9rem;
+  }
+  .сообщение.success { background: #e8f5ee; color: #14532d; }
+  .сообщение.error { background: #fbeae8; color: #7f1d1d; }
+  h2 {
+    font-size: 0.8rem; font-weight: 600; color: var(--серый);
+    text-transform: none; margin: 1.4rem 0 0.5rem;
+  }
+  .пусто { color: var(--серый); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<div class="страница">
+  <header>
+    <h1>Self-org</h1>
+    <div>
+      {% if user.is_authenticated %}
+        {{ user.get_username }} ·
+        <a href="/admin/">справочники</a> ·
+        <form action="{% url 'logout' %}" method="post" style="display:inline">
+          {% csrf_token %}<button class="ссылка" type="submit">выход</button>
+        </form>
+      {% endif %}
+    </div>
+  </header>
+  {% for сообщение in messages %}
+    <div class="сообщение {{ сообщение.tags }}">{{ сообщение }}</div>
+  {% endfor %}
+  {% block содержимое %}{% endblock %}
+</div>
+</body>
+</html>

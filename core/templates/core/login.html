@@ -1,0 +1,28 @@
+{# Вход в систему — своя страница, а не админская. #}
+{% extends "core/base.html" %}
+{% block title %}Вход — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="карточка" style="max-width: 22rem;">
+  <p class="подпись" style="margin-bottom: 0.6rem;">Вход в систему</p>
+  {% if form.errors %}
+    <div class="сообщение error">
+      Не подошли имя или пароль. Попробуйте ещё раз.
+    </div>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <p style="margin: 0 0 0.5rem;">
+      <label for="id_username" class="подпись">Имя</label><br>
+      <input type="text" name="username" id="id_username"
+             autocomplete="username" autofocus required>
+    </p>
+    <p style="margin: 0 0 0.7rem;">
+      <label for="id_password" class="подпись">Пароль</label><br>
+      <input type="password" name="password" id="id_password"
+             autocomplete="current-password" required>
+    </p>
+    <button type="submit" class="главная">Войти</button>
+  </form>
+</div>
+{% endblock %}

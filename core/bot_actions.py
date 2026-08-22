@@ -12,22 +12,15 @@ import datetime
 import hashlib
 import hmac
 import re
-from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import (
-    Completion,
-    Meter,
-    MeterReading,
-    NotificationProfile,
-    Obligation,
-    PendingInput,
-)
-from .status import estimate_meter, short_number
+from . import actions
+from .models import Meter, NotificationProfile, Obligation, PendingInput
+from .status import short_number
 
 # Сколько ждём ответ на вопрос бота: не ответили за сутки — вопрос
 # снят, случайное число позже не запишется как показание.
@@ -158,14 +151,8 @@ def _ожидание(пользователь, now):
     return запись
 
 
-def _число(текст: str) -> Decimal | None:
-    """Число из ответа: «118 500», «3500,50», «3 500.5» — всё годится."""
-    очищено = re.sub(r"[\s ]", "", текст or "").replace(",", ".")
-    try:
-        значение = Decimal(очищено)
-    except (InvalidOperation, ValueError):
-        return None
-    return значение if значение >= 0 else None
+# Разбор числа — общий с экраном (core/actions.py).
+_число = actions.parse_number
 
 
 # --- Привязка чата (правило 8) ---------------------------------------------
@@ -203,24 +190,8 @@ def mark_done(chat_id, obligation_id, today=None, now=None) -> str:
     if обязательство is None:
         return ЧУЖОЕ
     today = today or timezone.localdate()
-
-    # Показание при выполнении — расчётное на сегодня: пользователь
-    # не обязан лезть за точным (правило 4).
-    показание = None
-    if обязательство.meter:
-        оценка = estimate_meter(обязательство.meter, today)
-        показание = оценка.value if оценка else None
-
-    выполнение = Completion.objects.create(
-        obligation=обязательство,
-        date=today,
-        meter_value=показание,
-        done_by=пользователь,
-    )
-    # Отметили — начался новый цикл, отложка больше не нужна.
-    if обязательство.snoozed_until:
-        обязательство.snoozed_until = None
-        обязательство.save(update_fields=["snoozed_until"])
+    выполнение = actions.complete(обязательство, пользователь, today)
+    показание = выполнение.meter_value
 
     _спросить(
         пользователь, PendingInput.Kind.COST, completion=выполнение, now=now
@@ -242,9 +213,7 @@ def snooze(chat_id, obligation_id, days, today=None) -> str:
     обязательство = _обязательство(пользователь, obligation_id)
     if обязательство is None:
         return ЧУЖОЕ
-    today = today or timezone.localdate()
-    обязательство.snoozed_until = today + datetime.timedelta(days=days)
-    обязательство.save(update_fields=["snoozed_until"])
+    actions.snooze(обязательство, days, today)
     return (
         f"«{обязательство.name}» — отложено, "
         f"напомню {обязательство.snoozed_until:%d.%m.%Y}."
@@ -295,24 +264,22 @@ def handle_text(chat_id, text, now=None, today=None) -> str:
 
 
 def _записать_показание(счётчик, значение, today) -> str:
-    предыдущее = счётчик.readings.order_by("-date", "-id").first()
-    MeterReading.objects.create(meter=счётчик, value=значение, date=today)
+    _, подозрительное = actions.add_reading(счётчик, значение, today)
     ответ = (
         f"Записал: {счётчик.name} — {short_number(значение)} "
         f"{счётчик.unit} на {today:%d.%m.%Y}."
     )
     # Счётчик, который «поехал назад», — обычно опечатка. Не спорим,
     # но предупреждаем: расчёты по нему станут неверными.
-    if предыдущее and значение < предыдущее.value:
+    if подозрительное:
         ответ += (
             f"\nПрошлое показание было больше "
-            f"({short_number(предыдущее.value)} {счётчик.unit}) — "
+            f"({short_number(подозрительное.value)} {счётчик.unit}) — "
             f"проверьте, не опечатка ли."
         )
     return ответ
 
 
 def _записать_стоимость(выполнение, значение) -> str:
-    выполнение.cost = значение
-    выполнение.save(update_fields=["cost"])
+    actions.set_cost(выполнение, значение)
     return f"Стоимость записана: {short_number(значение)}."

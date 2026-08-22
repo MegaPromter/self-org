@@ -49,10 +49,41 @@ class Fact(models.Model):
         return f"{self.name}: {self.value}" if self.value else self.name
 
 
+class Category(models.Model):
+    """Раздел — крупная область жизни: транспорт, дом, семья.
+
+    Нужен главному экрану: плашки-фильтры сверху. Сделан
+    справочником, а не списком в коде, — у каждой семьи набор
+    свой, и переименовать раздел должно быть можно без правки
+    программы.
+    """
+
+    name = models.CharField("название", max_length=100, unique=True)
+    order = models.PositiveSmallIntegerField(
+        "порядок", default=100, help_text="Чем меньше, тем левее плашка."
+    )
+
+    class Meta:
+        verbose_name = "раздел"
+        verbose_name_plural = "разделы"
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
 class Item(models.Model):
     """Предмет — то, что обслуживают: автомобиль, котёл, фильтр."""
 
     name = models.CharField("название", max_length=200)
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        related_name="items",
+        null=True,
+        blank=True,
+        verbose_name="раздел",
+    )
     notes = models.TextField("заметки", blank=True)
     facts = GenericRelation(Fact, verbose_name="фактура")
 
@@ -188,6 +219,15 @@ class Obligation(models.Model):
         blank=True,
         verbose_name="человек",
     )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        related_name="obligations",
+        null=True,
+        blank=True,
+        verbose_name="раздел",
+        help_text="Пусто — берётся раздел предмета.",
+    )
     notes = models.TextField("заметки", blank=True)
 
     # --- Правило срока: вид и его части --------------------------------
@@ -283,6 +323,16 @@ class Obligation(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def effective_category(self):
+        """Раздел для главного экрана: свой, иначе предмета, иначе нет.
+
+        Правило 3 заметки «Главный экран»: заведя «Kia»
+        в «Транспорт», пользователь не указывает раздел у каждой
+        её работы отдельно.
+        """
+        return self.category or (self.item.category if self.item else None)
 
     def clean(self):
         """Проверка, что у выбранного вида правила заполнены его части."""
