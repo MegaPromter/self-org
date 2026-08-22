@@ -1,0 +1,9 @@
+{# Одно поле формы: подпись, поле, подсказка, ошибка. #}
+<div class="поле {% if поле.errors %}сошибкой{% endif %}">
+  <label for="{{ поле.id_for_label }}" class="подпись">{{ поле.label }}</label>
+  {{ поле }}
+  {% if поле.help_text %}<p class="фактура">{{ поле.help_text }}</p>{% endif %}
+  {% for ошибка in поле.errors %}
+    <p class="ошибка">{{ ошибка }}</p>
+  {% endfor %}
+</div>

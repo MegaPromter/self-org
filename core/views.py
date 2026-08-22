@@ -20,6 +20,7 @@ from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views.decorators.http import require_POST
 
 from . import actions
+from .forms import CompletionForm, ObligationForm
 from .models import Category, Completion
 from .status import (
     State,
@@ -577,3 +578,154 @@ def add_reading(request, pk):
         )
     messages.success(request, текст)
     return _назад(request)
+
+
+# --- Заведение и правка (заметка «Заведение данных без админки») ------------
+
+
+def _вернуться(request, по_умолчанию=None):
+    """Куда уйти после сохранения: откуда пришли, иначе — на главную."""
+    адрес = request.POST.get("назад") or request.GET.get("назад") or ""
+    if not url_has_allowed_host_and_scheme(
+        адрес, allowed_hosts={request.get_host()}, require_https=False
+    ):
+        адрес = по_умолчанию or reverse("home")
+    return redirect(адрес)
+
+
+def _страница_формы(request, форма, заголовок, назад, удаление=None):
+    """Общая обвязка страницы с формой: меню, сводка, кнопки."""
+    today = timezone.localdate()
+    все_дела = _дела(request.user, today)
+    контекст = _каркас(request, все_дела, все_дела, today, активный=None)
+    контекст.update(
+        {
+            "форма": форма,
+            "заголовок": заголовок,
+            "назад": назад,
+            "адрес_удаления": удаление,
+        }
+    )
+    return render(request, "core/form.html", контекст)
+
+
+@login_required
+def obligation_new(request):
+    """Новое дело: форма с созданием предмета и счётчика на лету."""
+    назад = request.GET.get("назад") or reverse("home")
+    начальные = {}
+    раздел = request.GET.get("раздел")
+    if раздел and раздел.isdigit():
+        начальные["category"] = раздел
+    if request.method == "POST":
+        форма = ObligationForm(request.POST, user=request.user)
+        if форма.is_valid():
+            дело = форма.save()
+            messages.success(request, f"«{дело.name}» — дело заведено.")
+            return _вернуться(request, reverse("obligation", args=[дело.pk]))
+    else:
+        форма = ObligationForm(initial=начальные, user=request.user)
+    return _страница_формы(request, форма, "Новое дело", назад)
+
+
+@login_required
+def obligation_edit(request, pk):
+    """Правка дела."""
+    дело = actions.obligation_for(request.user, pk)
+    if дело is None:
+        raise Http404
+    назад = request.GET.get("назад") or reverse("obligation", args=[дело.pk])
+    if request.method == "POST":
+        форма = ObligationForm(request.POST, instance=дело, user=request.user)
+        if форма.is_valid():
+            форма.save()
+            messages.success(request, f"«{дело.name}» — изменения сохранены.")
+            return _вернуться(request, reverse("obligation", args=[дело.pk]))
+    else:
+        форма = ObligationForm(instance=дело, user=request.user)
+    return _страница_формы(
+        request,
+        форма,
+        f"Правка: {дело.name}",
+        назад,
+        удаление=reverse("obligation_delete", args=[дело.pk]),
+    )
+
+
+@login_required
+def obligation_detail(request, pk):
+    """Карточка дела: состояние, фактура, история выполнений."""
+    обязательство = actions.obligation_for(request.user, pk)
+    if обязательство is None:
+        raise Http404
+    today = timezone.localdate()
+    все_дела = _дела(request.user, today)
+    дело = next(
+        (д for д in все_дела if д.obligation.pk == обязательство.pk), None
+    )
+    контекст = _каркас(
+        request,
+        все_дела,
+        все_дела,
+        today,
+        активный=(дело.ключ_раздела if дело else None),
+    )
+    контекст.update(
+        {
+            "дело": дело,
+            "обязательство": обязательство,
+            "выполнения": обязательство.completions.select_related("done_by"),
+            "форма_выполнения": CompletionForm(
+                initial={"date": today}, prefix="в"
+            ),
+            "статус": compute_status(обязательство, today),
+        }
+    )
+    return render(request, "core/obligation.html", контекст)
+
+
+@require_POST
+@login_required
+def obligation_delete(request, pk):
+    """Удаление дела — только после подтверждения на карточке."""
+    дело = actions.obligation_for(request.user, pk)
+    if дело is None:
+        raise Http404
+    имя = дело.name
+    дело.delete()
+    messages.success(request, f"«{имя}» — удалено вместе с историей.")
+    return redirect("home")
+
+
+@require_POST
+@login_required
+def completion_add(request, pk):
+    """Отметить выполнение задним числом (форма на карточке дела)."""
+    дело = actions.obligation_for(request.user, pk)
+    if дело is None:
+        raise Http404
+    форма = CompletionForm(request.POST, prefix="в")
+    if not форма.is_valid():
+        messages.error(request, "Проверьте дату и числа — запись не сделана.")
+        return redirect("obligation", pk=pk)
+    выполнение = форма.save(commit=False)
+    выполнение.obligation = дело
+    выполнение.done_by = request.user
+    выполнение.save()
+    messages.success(
+        request, f"Записано: сделано {выполнение.date:%d.%m.%Y}."
+    )
+    return redirect("obligation", pk=pk)
+
+
+@require_POST
+@login_required
+def completion_delete(request, pk):
+    """Удалить ошибочную отметку выполнения."""
+    выполнение = get_object_or_404(Completion, pk=pk)
+    дело = actions.obligation_for(request.user, выполнение.obligation_id)
+    if дело is None:
+        raise Http404
+    выполнение.delete()
+    messages.success(request, "Отметка удалена, сроки пересчитаны.")
+    return redirect("obligation", pk=дело.pk)

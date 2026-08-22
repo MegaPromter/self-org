@@ -1,7 +1,10 @@
 {# Карточка дела — общая для главной, списка и раздела. #}
 <div class="карточка {{ дело.цвет }}">
   <div class="заголовок">
-    <span class="имя">{{ дело.obligation.name }}</span>
+    <span class="имя">
+      <a class="ссылка-дела" href="{% url 'obligation' дело.obligation.pk %}"
+        >{{ дело.obligation.name }}</a>
+    </span>
     <span class="метка {{ дело.цвет }}">{{ дело.метка }}</span>
   </div>
   <p class="подпись">

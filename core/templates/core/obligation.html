@@ -1,0 +1,56 @@
+{# Карточка дела: состояние, история выполнений, фактура. #}
+{% extends "core/base.html" %}
+{% block title %}{{ обязательство.name }} — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="шапка-раздела">
+  <span class="название">{{ обязательство.name }}</span>
+  <span class="подпись">
+    <a href="{% url 'obligation_edit' обязательство.pk %}">править</a>
+  </span>
+</div>
+
+{% if дело %}
+  <div class="список">{% include "core/_дело.html" %}</div>
+{% else %}
+  <p class="пусто">Дело закрыто — разовое и уже выполнено.</p>
+{% endif %}
+
+<h2>Отметить выполнение</h2>
+<form method="post" action="{% url 'completion_add' обязательство.pk %}"
+      class="карточка форма">
+  {% csrf_token %}
+  {% include "core/_поле.html" with поле=форма_выполнения.date %}
+  {% if обязательство.meter %}
+    {% include "core/_поле.html" with поле=форма_выполнения.meter_value %}
+  {% endif %}
+  {% include "core/_поле.html" with поле=форма_выполнения.cost %}
+  {% include "core/_поле.html" with поле=форма_выполнения.note %}
+  <div class="кнопки">
+    <button type="submit" class="главная">Записать</button>
+  </div>
+</form>
+
+<h2>История</h2>
+{% for выполнение in выполнения %}
+  <div class="карточка" style="margin-bottom: 0.5rem;">
+    <div class="заголовок">
+      <span class="имя">{{ выполнение.date|date:"j E Y" }}</span>
+      <form method="post" action="{% url 'completion_delete' выполнение.pk %}"
+            onsubmit="return confirm('Удалить эту отметку? Сроки пересчитаются.')">
+        {% csrf_token %}
+        <button type="submit" class="мелкая">удалить</button>
+      </form>
+    </div>
+    <p class="подпись">
+      {% if выполнение.meter_value %}{{ выполнение.meter_value|floatformat:"-2" }}
+        {{ обязательство.meter.unit }}{% endif %}
+      {% if выполнение.cost %}· {{ выполнение.cost|floatformat:"-2" }} ₽{% endif %}
+      {% if выполнение.done_by %}· {{ выполнение.done_by }}{% endif %}
+    </p>
+    {% if выполнение.note %}<p class="фактура">{{ выполнение.note }}</p>{% endif %}
+  </div>
+{% empty %}
+  <p class="пусто">Отметок ещё не было.</p>
+{% endfor %}
+{% endblock %}

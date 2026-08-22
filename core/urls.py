@@ -15,4 +15,27 @@ urlpatterns = [
     path("cost/<int:pk>/", views.set_cost, name="set_cost"),
     path("snooze/<int:pk>/", views.snooze, name="snooze"),
     path("reading/<int:pk>/", views.add_reading, name="add_reading"),
+    # Заведение и правка — заметка «Заведение данных без админки».
+    path("new/", views.obligation_new, name="obligation_new"),
+    path("obligation/<int:pk>/", views.obligation_detail, name="obligation"),
+    path(
+        "obligation/<int:pk>/edit/",
+        views.obligation_edit,
+        name="obligation_edit",
+    ),
+    path(
+        "obligation/<int:pk>/delete/",
+        views.obligation_delete,
+        name="obligation_delete",
+    ),
+    path(
+        "obligation/<int:pk>/completion/",
+        views.completion_add,
+        name="completion_add",
+    ),
+    path(
+        "completion/<int:pk>/delete/",
+        views.completion_delete,
+        name="completion_delete",
+    ),
 ]

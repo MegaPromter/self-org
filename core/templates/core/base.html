@@ -145,6 +145,23 @@
   }
   .счётчики h2 { margin-top: 0.4rem; }
   .пусто { color: var(--серый); font-size: 0.9rem; }
+  .ссылка-дела { color: inherit; text-decoration: none; }
+  .ссылка-дела:hover { text-decoration: underline; }
+  .форма .поле { margin-bottom: 0.7rem; }
+  .форма .поле > label { display: block; margin-bottom: 0.15rem; }
+  .форма input[type="text"], .форма input[type="date"],
+  .форма input[type="number"], .форма select, .форма textarea {
+    font: inherit; font-size: 0.95rem; width: 100%; padding: 0.4rem 0.5rem;
+    border: 1px solid #cfcdc6; border-radius: 8px; background: var(--лист);
+    color: var(--текст);
+  }
+  .форма .поле.сошибкой input, .форма .поле.сошибкой select {
+    border-color: #e6b0aa;
+  }
+  .форма .ошибка { color: var(--красный); font-size: 0.8rem; margin: 0.2rem 0 0; }
+  .форма h2 { margin-top: 1.1rem; }
+  .форма details summary { cursor: pointer; margin: 0.8rem 0 0.4rem; }
+  .форма .поле input[type="checkbox"] { width: auto; }
 
   /* Экран пошире: меню становится колонкой слева, счётчики — под ним. */
   @media (min-width: 60rem) {

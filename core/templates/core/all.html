@@ -5,12 +5,14 @@
 {% block содержимое %}
 <div class="шапка-раздела">
   <span class="название">Все дела</span>
-  <span class="подпись">по срочности</span>
+  <span class="подпись">
+    по срочности ·
+    <a href="{% url 'obligation_new' %}?назад={{ назад|urlencode }}">+ дело</a>
+  </span>
 </div>
 {% if пусто %}
   <p class="пусто">
-    Дел пока нет. Заведите предмет и обязательство в
-    <a href="/admin/">справочниках</a>.
+    Дел пока нет. <a href="{% url 'obligation_new' %}">Заведите первое</a>.
   </p>
 {% else %}
   <div class="список">

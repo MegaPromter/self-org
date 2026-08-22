@@ -1,0 +1,112 @@
+{# Форма дела: поля идут по-человечески, лишнее прячется. #}
+{% extends "core/base.html" %}
+{% block title %}{{ заголовок }} — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="шапка-раздела">
+  <span class="название">{{ заголовок }}</span>
+  <span class="подпись"><a href="{{ назад }}">← назад</a></span>
+</div>
+
+{% if форма.non_field_errors %}
+  <div class="сообщение error">{{ форма.non_field_errors }}</div>
+{% endif %}
+
+<form method="post" class="карточка форма">
+  {% csrf_token %}
+  <input type="hidden" name="назад" value="{{ назад }}">
+
+  {% include "core/_поле.html" with поле=форма.name %}
+  {% include "core/_поле.html" with поле=форма.category %}
+
+  <h2>К чему относится</h2>
+  {% include "core/_поле.html" with поле=форма.item %}
+  {% include "core/_поле.html" with поле=форма.новый_предмет %}
+  {% include "core/_поле.html" with поле=форма.person %}
+  {% include "core/_поле.html" with поле=форма.новый_человек %}
+
+  <h2>Когда напоминать</h2>
+  {% include "core/_поле.html" with поле=форма.rule_kind %}
+
+  <div data-часть="время">
+    {% include "core/_поле.html" with поле=форма.time_kind %}
+    <div data-часть="разово">
+      {% include "core/_поле.html" with поле=форма.due_date %}
+    </div>
+    <div data-часть="интервал">
+      {% include "core/_поле.html" with поле=форма.interval_value %}
+      {% include "core/_поле.html" with поле=форма.interval_unit %}
+    </div>
+    <div data-часть="ежегодно">
+      {% include "core/_поле.html" with поле=форма.годовщина %}
+    </div>
+  </div>
+
+  <div data-часть="счётчик">
+    {% include "core/_поле.html" with поле=форма.meter %}
+    {% include "core/_поле.html" with поле=форма.новый_счётчик %}
+    {% include "core/_поле.html" with поле=форма.единица_счётчика %}
+    {% include "core/_поле.html" with поле=форма.meter_interval %}
+  </div>
+
+  <h2>Когда делали последний раз</h2>
+  {% include "core/_поле.html" with поле=форма.последний_раз %}
+  <div data-часть="счётчик">
+    {% include "core/_поле.html" with поле=форма.показание_тогда %}
+  </div>
+
+  {% include "core/_поле.html" with поле=форма.notes %}
+
+  <details>
+    <summary class="подпись">дополнительно</summary>
+    {% include "core/_поле.html" with поле=форма.soon_threshold_percent %}
+    {% include "core/_поле.html" with поле=форма.overdue_repeat_days %}
+    {% include "core/_поле.html" with поле=форма.assignee %}
+    {% include "core/_поле.html" with поле=форма.is_private %}
+  </details>
+
+  <div class="кнопки">
+    <button type="submit" class="главная">Сохранить</button>
+    <a class="подпись" href="{{ назад }}">отмена</a>
+  </div>
+</form>
+
+{% if адрес_удаления %}
+  <form method="post" action="{{ адрес_удаления }}" class="карточка"
+        onsubmit="return confirm('Удалить дело вместе с историей выполнений и фактурой?')">
+    {% csrf_token %}
+    <p class="подпись">
+      Удаление уберёт дело, его выполнения и фактуру. Предмет
+      и счётчик останутся.
+    </p>
+    <div class="кнопки"><button type="submit">Удалить дело</button></div>
+  </form>
+{% endif %}
+
+<script>
+  // Прячем части формы, не относящиеся к выбранному правилу.
+  // Без скрипта видны все поля — форма работает и так.
+  (function () {
+    var вид = document.getElementById('id_rule_kind');
+    var повремени = document.getElementById('id_time_kind');
+    if (!вид) return;
+    function показать(имя, надо) {
+      document.querySelectorAll('[data-часть="' + имя + '"]').forEach(
+        function (узел) { узел.hidden = !надо; }
+      );
+    }
+    function обновить() {
+      var значение = вид.value;
+      показать('время', значение === 'time' || значение === 'both');
+      показать('счётчик', значение === 'meter' || значение === 'both');
+      var правило = повремени ? повремени.value : '';
+      показать('разово', правило === 'once');
+      показать('интервал', правило === 'interval');
+      показать('ежегодно', правило === 'annual');
+    }
+    вид.addEventListener('change', обновить);
+    if (повремени) повремени.addEventListener('change', обновить);
+    обновить();
+  })();
+</script>
+{% endblock %}
