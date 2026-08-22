@@ -1,7 +1,8 @@
-"""Тесты главного экрана — пункты «Как проверим» заметки
-«Главный экран»: порядок дел, плашки разделов, пометка оценки,
+"""Тесты экранов — пункты «Как проверим» заметок «Главный экран»
+и «Разделы на главной»: плитки разделов, страница раздела,
+короткий список на главной, полный список, порядок по срочности,
 «Сделано» со стоимостью, «Отложить» и возврат, счётчики,
-чужое личное.
+чужое личное, разделитель тысяч.
 
 Даты считаются от сегодняшнего дня: экран берёт «сегодня» сам.
 """
@@ -25,6 +26,7 @@ from core.models import (
 )
 
 СЕГОДНЯ = timezone.localdate()
+ПРОБЕЛ = " "  # неразрывный пробел между тысячами
 
 
 def дней_назад(n):
@@ -69,7 +71,7 @@ def машина(db):
 
 @pytest.fixture
 def дела(хозяин, машина):
-    """Три дела: просроченное, скорое и спокойное — плюс без данных."""
+    """Просроченное, скорое, спокойное — и одно без данных."""
     предмет, счётчик = машина
     жидкость = Obligation.objects.create(
         name="Тормозная жидкость",
@@ -129,10 +131,95 @@ def порядок(текст, *имена):
     return места
 
 
+# --- Плитки разделов и страница раздела ------------------------------------
+
+
 @pytest.mark.django_db
-def test_dela_idut_ot_samogo_goryashchego(вошедший, дела):
-    жидкость, сестра, фильтр, котёл = дела
+def test_plitki_pokazyvayut_vse_razdely_i_schet(вошедший, дела):
     текст = вошедший.get("/").content.decode()
+    # Все семь разделов справочника, включая пустые.
+    for раздел in Category.objects.all():
+        assert раздел.name in текст
+    assert "1 просрочено" in текст  # Тормозная жидкость
+    assert "всего 2" in текст  # Дом: фильтр и котёл
+    assert "дел нет" in текст  # Хозяйство и другие пустые
+
+
+@pytest.mark.django_db
+def test_plitka_otkryvaet_stranicu_razdela(вошедший, дела):
+    транспорт = Category.objects.get(name="Транспорт")
+    страница = вошедший.get(f"/section/{транспорт.pk}/")
+    текст = страница.content.decode()
+    assert страница.status_code == 200
+    assert "Тормозная жидкость" in текст
+    assert "Фильтр воды на кухне" not in текст
+    # Счётчики раздела — здесь же.
+    assert "Пробег" in текст
+
+
+@pytest.mark.django_db
+def test_stranica_razdela_pokazyvaet_otlozhennye_i_bez_dannyh(вошедший, дела):
+    дом = Category.objects.get(name="Дом")
+    фильтр = дела[2]
+    вошедший.post(
+        f"/snooze/{фильтр.pk}/", {"дней": "3", "назад": f"/section/{дом.pk}/"}
+    )
+    текст = вошедший.get(f"/section/{дом.pk}/").content.decode()
+    assert "молчу до" in текст  # отложенное осталось на виду
+    assert "Промывка котла" in текст  # «нет данных» тоже здесь
+    assert "отметьте, когда делалось в последний раз" in текст
+
+
+@pytest.mark.django_db
+def test_pustoy_razdel_otkryvaetsya_i_obyasnyaet(вошедший, дела):
+    хозяйство = Category.objects.get(name="Хозяйство")
+    текст = вошедший.get(f"/section/{хозяйство.pk}/").content.decode()
+    assert "В этом разделе дел нет" in текст
+
+
+@pytest.mark.django_db
+def test_dela_bez_razdela_popadayut_v_prochee(вошедший, хозяин):
+    Obligation.objects.create(
+        name="Сдать анализы",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.ONCE,
+        due_date=дней_назад(1),
+        owner=хозяин,
+    )
+    текст = вошедший.get("/").content.decode()
+    assert "Прочее" in текст
+    assert "Сдать анализы" in вошедший.get("/section/none/").content.decode()
+
+
+# --- Главная и полный список -----------------------------------------------
+
+
+@pytest.mark.django_db
+def test_na_glavnoy_goryashchee_i_tri_blizhayshih(вошедший, дела, хозяин):
+    # Ещё пять спокойных дел: на главной они целиком не поместятся.
+    for номер in range(5):
+        спокойное = Obligation.objects.create(
+            name=f"Спокойное дело {номер}",
+            rule_kind=Obligation.RuleKind.TIME,
+            time_kind=Obligation.TimeKind.INTERVAL,
+            interval_value=12,
+            interval_unit=Obligation.IntervalUnit.MONTHS,
+            owner=хозяин,
+        )
+        Completion.objects.create(obligation=спокойное, date=дней_назад(номер))
+
+    текст = вошедший.get("/").content.decode()
+    показано = sum(текст.count(имя) for имя in ["Спокойное дело"])
+    assert показано == 0 or показано <= 3
+    assert "Тормозная жидкость" in текст  # просроченное — всегда
+    assert "Поздравить сестру Олю" in текст  # скорое — всегда
+    assert "Промывка котла" not in текст  # «нет данных» — только в полном
+    assert "показать все дела (9)" in текст
+
+
+@pytest.mark.django_db
+def test_polnyy_spisok_pokazyvaet_vsyo_po_srochnosti(вошедший, дела):
+    текст = вошедший.get("/all/").content.decode()
     места = порядок(
         текст,
         "Тормозная жидкость",
@@ -142,40 +229,33 @@ def test_dela_idut_ot_samogo_goryashchego(вошедший, дела):
     )
     assert места == sorted(места)
     assert "просрочено" in текст and "скоро" in текст and "в норме" in текст
-    # Полоска пройденной доли интервала — с процентом в ширине.
-    assert "width: 100%" in текст
+    assert "width: 100%" in текст  # полоска пройденной доли интервала
+    assert "Счётчики" in текст
 
 
 @pytest.mark.django_db
 def test_ocenka_pomechena(вошедший, дела):
     """Пробег посчитан по среднему темпу — рядом «≈»."""
-    текст = вошедший.get("/").content.decode()
-    assert "≈" in текст
+    assert "≈" in вошедший.get("/").content.decode()
 
 
 @pytest.mark.django_db
-def test_plashki_razdelov_filtruyut(вошедший, дела):
-    транспорт = Category.objects.get(name="Транспорт")
-    текст = вошедший.get("/").content.decode()
-    assert "Транспорт 1" in текст  # число дел раздела
-    assert "•" in текст  # красная точка: в разделе есть просроченное
+def test_tysyachi_razdelyayutsya_probelom(вошедший, дела):
+    текст = вошедший.get("/all/").content.decode()
+    assert f"119{ПРОБЕЛ}600" in текст  # оценка пробега в блоке счётчиков
 
-    только_транспорт = вошедший.get(
-        "/", {"раздел": str(транспорт.pk)}
-    ).content.decode()
-    assert "Тормозная жидкость" in только_транспорт
-    assert "Фильтр воды на кухне" not in только_транспорт
-    # Счётчики тоже по разделу: пробег машины остаётся, чужие уходят.
-    assert "Пробег" in только_транспорт
+
+# --- Действия ---------------------------------------------------------------
 
 
 @pytest.mark.django_db
 def test_sdelano_zapisyvaet_vypolnenie_i_prosit_stoimost(вошедший, дела):
     жидкость = дела[0]
-    ответ = вошедший.post(f"/done/{жидкость.pk}/")
+    ответ = вошедший.post(f"/done/{жидкость.pk}/", {"назад": "/all/"})
     assert ответ.status_code == 302
     # Адрес закодирован (кириллица в переходе) — сверяем расшифровку.
     assert "стоимость=" in unquote(ответ["Location"])
+    assert ответ["Location"].startswith("/all/")
 
     выполнение = жидкость.completions.order_by("-id").first()
     assert выполнение.date == СЕГОДНЯ
@@ -184,8 +264,7 @@ def test_sdelano_zapisyvaet_vypolnenie_i_prosit_stoimost(вошедший, де�
 
     экран = вошедший.get(ответ["Location"]).content.decode()
     assert "Сколько стоило" in экран
-    # Отмеченное дело вернулось в норму — просрочки больше нет.
-    assert "просрочено" not in экран
+    assert "просрочено" not in экран  # дело вернулось в норму
 
     вошедший.post(f"/cost/{выполнение.pk}/", {"значение": "3 500"})
     выполнение.refresh_from_db()
@@ -193,25 +272,43 @@ def test_sdelano_zapisyvaet_vypolnenie_i_prosit_stoimost(вошедший, де�
 
 
 @pytest.mark.django_db
+def test_deystvie_vozvrashchaet_na_tu_zhe_stranicu(вошедший, дела):
+    транспорт = Category.objects.get(name="Транспорт")
+    адрес = f"/section/{транспорт.pk}/"
+    ответ = вошедший.post(f"/done/{дела[0].pk}/", {"назад": адрес})
+    assert ответ["Location"].startswith(адрес)
+
+
+@pytest.mark.django_db
+def test_chuzhoy_adres_vozvrata_ne_ispolzuetsya(вошедший, дела):
+    ответ = вошедший.post(
+        f"/done/{дела[0].pk}/", {"назад": "https://example.com/"}
+    )
+    assert ответ["Location"].startswith("/")
+
+
+@pytest.mark.django_db
 def test_otlozhit_i_vernut_v_spisok(вошедший, дела, хозяин):
     жидкость = дела[0]
-    вошедший.post(f"/snooze/{жидкость.pk}/", {"дней": "3"})
+    вошедший.post(f"/snooze/{жидкость.pk}/", {"дней": "3", "назад": "/all/"})
     жидкость.refresh_from_db()
     assert жидкость.snoozed_until == СЕГОДНЯ + datetime.timedelta(days=3)
 
-    текст = вошедший.get("/").content.decode()
+    текст = вошедший.get("/all/").content.decode()
     assert "молчу до" in текст
     # Отложенное ушло вниз — под спокойное дело. Смотрим на чистой
     # странице: зелёная плашка с сообщением показывается только раз.
-    текст = вошедший.get("/").content.decode()
+    текст = вошедший.get("/all/").content.decode()
     места = порядок(текст, "Фильтр воды на кухне", "Тормозная жидкость")
     assert места == sorted(места)
+    # На главной отложенного нет — оно уже не горит.
+    assert "Тормозная жидкость" not in вошедший.get("/").content.decode()
 
     # Пока отложено — планировщик о нём молчит.
     planner.run()
     assert not Notification.objects.filter(obligation=жидкость).exists()
 
-    вошедший.post(f"/snooze/{жидкость.pk}/", {"дней": "0"})
+    вошедший.post(f"/snooze/{жидкость.pk}/", {"дней": "0", "назад": "/all/"})
     жидкость.refresh_from_db()
     assert жидкость.snoozed_until is None
 
@@ -224,21 +321,25 @@ def test_schetchik_prosit_pokazaniya_i_prinimaet_ih(вошедший, дела, 
         meter=счётчик, value=Decimal("118000"), date=дней_назад(120)
     )
 
-    текст = вошедший.get("/").content.decode()
+    текст = вошедший.get("/all/").content.decode()
     assert "пора ввести" in текст
 
-    вошедший.post(f"/reading/{счётчик.pk}/", {"значение": "118 500"})
+    вошедший.post(
+        f"/reading/{счётчик.pk}/", {"значение": "118 500", "назад": "/all/"}
+    )
     последнее = счётчик.readings.order_by("-date", "-id").first()
     assert последнее.value == Decimal("118500")
     assert последнее.date == СЕГОДНЯ
-    assert "пора ввести" not in вошедший.get("/").content.decode()
+    assert "пора ввести" not in вошедший.get("/all/").content.decode()
 
 
 @pytest.mark.django_db
 def test_pokazanie_menshe_proshlogo_preduprezhdaet(вошедший, машина, дела):
     _, счётчик = машина
     ответ = вошедший.post(
-        f"/reading/{счётчик.pk}/", {"значение": "100000"}, follow=True
+        f"/reading/{счётчик.pk}/",
+        {"значение": "100000", "назад": "/all/"},
+        follow=True,
     )
     assert "не опечатка ли" in ответ.content.decode()
 
@@ -253,8 +354,7 @@ def test_chuzhoe_lichnoe_ne_vidno_i_ne_menyaetsya(вошедший, сосед, 
         owner=сосед,
         is_private=True,
     )
-    текст = вошедший.get("/").content.decode()
-    assert "Личное дело соседа" not in текст
+    assert "Личное дело соседа" not in вошедший.get("/all/").content.decode()
 
     ответ = вошедший.post(f"/done/{чужое.pk}/", follow=True)
     assert "не ваше" in ответ.content.decode()
@@ -270,9 +370,9 @@ def test_zakrytoe_razovoe_ne_pokazyvaetsya(вошедший, хозяин):
         due_date=дней_назад(10),
         owner=хозяин,
     )
-    assert "Оплатить страховку" in вошедший.get("/").content.decode()
+    assert "Оплатить страховку" in вошедший.get("/all/").content.decode()
     Completion.objects.create(obligation=разовое, date=дней_назад(1))
-    assert "Оплатить страховку" not in вошедший.get("/").content.decode()
+    assert "Оплатить страховку" not in вошедший.get("/all/").content.decode()
 
 
 @pytest.mark.django_db

@@ -1,22 +1,25 @@
-"""Главный экран — заметка «Главный экран».
+"""Экраны — заметки «Главный экран» и «Разделы на главной».
 
-Экран ничего не считает сам: состояния и сроки берёт
-из `core/status.py`, записи делает через `core/actions.py` —
-теми же правилами, что кнопки в Telegram.
+Три страницы: главная (плитки разделов + самое срочное), полный
+список по срочности и страница раздела. Экран ничего не считает
+сам: состояния и сроки берёт из `core/status.py`, записи делает
+через `core/actions.py` — теми же правилами, что кнопки
+в Telegram.
 """
 from dataclasses import dataclass, field
 from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.http import urlencode
+from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views.decorators.http import require_POST
 
 from . import actions
-from .models import Completion
+from .models import Category, Completion
 from .status import (
     State,
     compute_status,
@@ -28,8 +31,12 @@ from .status import (
 # Насколько можно отложить дело кнопкой — как в Telegram.
 ВАРИАНТЫ_ОТКЛАДЫВАНИЯ = [1, 3, 7]
 
-# Ключ раздела в адресе для дел, у которых раздела нет.
-БЕЗ_РАЗДЕЛА = "нет"
+# Ключ в адресе для дел, у которых раздела нет.
+БЕЗ_РАЗДЕЛА = "none"
+
+# Сколько спокойных дел показывать на главной вдобавок к горящим —
+# чтобы видеть, что надвигается (правило 3 заметки «Разделы»).
+БЛИЖАЙШИХ_НА_ГЛАВНОЙ = 3
 
 ГРУППА_ОБЫЧНЫЕ, ГРУППА_ОТЛОЖЕННЫЕ, ГРУППА_БЕЗ_ДАННЫХ = 0, 1, 2
 
@@ -49,7 +56,11 @@ class Дело:
 
     @property
     def просрочено(self):
-        return self.status.state is State.OVERDUE
+        return self.status.state is State.OVERDUE and not self.отложено_до
+
+    @property
+    def скоро(self):
+        return self.status.state is State.SOON and not self.отложено_до
 
     @property
     def метка(self):
@@ -69,11 +80,14 @@ class Дело:
             State.OK: "ok",
         }.get(self.status.state, "nodata")
 
-    @property
-    def подпись(self):
-        """Вторая строка: раздел, к чему относится, сколько осталось."""
+    def подпись(self, с_разделом=True):
+        """Вторая строка: раздел, к чему относится, сколько осталось.
+
+        На странице раздела название раздела не повторяем — оно
+        и так в заголовке.
+        """
         части = []
-        if self.раздел:
+        if с_разделом and self.раздел:
             части.append(str(self.раздел))
         предмет = self.obligation.item or self.obligation.person
         if предмет:
@@ -83,15 +97,48 @@ class Дело:
             части.append(f"молчу до {self.отложено_до:%d.%m.%Y}")
         return " · ".join(части)
 
+    @property
+    def подпись_полная(self):
+        return self.подпись()
+
+    @property
+    def подпись_без_раздела(self):
+        return self.подпись(с_разделом=False)
+
 
 @dataclass
-class Плашка:
-    """Плашка раздела над списком."""
+class Плитка:
+    """Плитка раздела на главной."""
 
     ключ: str
     название: str
-    количество: int
-    просрочено: bool
+    просрочено: int
+    скоро: int
+    всего: int
+
+    @property
+    def пусто(self):
+        return self.всего == 0
+
+    @property
+    def цвет(self):
+        if self.просрочено:
+            return "overdue"
+        if self.скоро:
+            return "soon"
+        return "ok" if self.всего else "empty"
+
+    @property
+    def счёт(self):
+        """«1 просрочено · 1 скоро» — или «всё спокойно»."""
+        части = []
+        if self.просрочено:
+            части.append(f"{self.просрочено} просрочено")
+        if self.скоро:
+            части.append(f"{self.скоро} скоро")
+        if части:
+            return " · ".join(части)
+        return "всё спокойно" if self.всего else "дел нет"
 
 
 @dataclass
@@ -131,6 +178,11 @@ def _процент(статус):
     return int(min(статус.fraction, Decimal(1)) * 100)
 
 
+def _ключ(раздел):
+    """Как раздел выглядит в адресе страницы."""
+    return str(раздел.pk) if раздел else БЕЗ_РАЗДЕЛА
+
+
 def _дела(user, today):
     """Видимые дела, кроме закрытых, сразу в порядке показа."""
     запрос = (
@@ -163,7 +215,7 @@ def _дела(user, today):
                 obligation=обязательство,
                 status=статус,
                 раздел=раздел,
-                ключ_раздела=str(раздел.pk) if раздел else БЕЗ_РАЗДЕЛА,
+                ключ_раздела=_ключ(раздел),
                 группа=группа,
                 процент=_процент(статус),
                 отложено_до=отложено,
@@ -171,7 +223,7 @@ def _дела(user, today):
             )
         )
     # Сверху самое горящее: больше пройдено — выше; при равенстве
-    # выше тот, кому меньше дней осталось (правило 4).
+    # выше тот, кому меньше дней осталось.
     дела.sort(
         key=lambda д: (
             д.группа,
@@ -183,52 +235,50 @@ def _дела(user, today):
     return дела
 
 
-def _плашки(дела):
-    """Разделы, в которых что-то есть, плюс «Всё» первой плашкой."""
+def _плитки(дела):
+    """Плитки всех разделов справочника плюс «Прочее», если нужно.
+
+    Пустые разделы показываются серыми: пользователь видит всю
+    свою структуру, даже пока дел в ней нет (правило 1).
+    """
     счёт = {}
     for дело in дела:
-        ключ = дело.ключ_раздела
-        всего, просрочено, имя, порядок = счёт.get(
-            ключ,
-            (
-                0,
-                False,
-                str(дело.раздел) if дело.раздел else "Прочее",
-                дело.раздел.order if дело.раздел else 10**6,
-            ),
+        запись = счёт.setdefault(дело.ключ_раздела, [0, 0, 0])
+        запись[2] += 1
+        if дело.просрочено:
+            запись[0] += 1
+        elif дело.скоро:
+            запись[1] += 1
+
+    плитки = []
+    for раздел in Category.objects.all():
+        просрочено, скоро, всего = счёт.get(str(раздел.pk), (0, 0, 0))
+        плитки.append(
+            Плитка(str(раздел.pk), раздел.name, просрочено, скоро, всего)
         )
-        счёт[ключ] = (всего + 1, просрочено or дело.просрочено, имя, порядок)
-    плашки = [
-        Плашка(
-            ключ="",
-            название="Всё",
-            количество=len(дела),
-            просрочено=any(д.просрочено for д in дела),
+    if БЕЗ_РАЗДЕЛА in счёт:
+        просрочено, скоро, всего = счёт[БЕЗ_РАЗДЕЛА]
+        плитки.append(
+            Плитка(БЕЗ_РАЗДЕЛА, "Прочее", просрочено, скоро, всего)
         )
-    ]
-    for ключ, (всего, просрочено, имя, _) in sorted(
-        счёт.items(), key=lambda пара: (пара[1][3], пара[1][2])
-    ):
-        плашки.append(Плашка(ключ, имя, всего, просрочено))
-    return плашки
+    return плитки
 
 
-def _счётчики(user, today, выбранный=""):
+def _счётчики(user, today, ключ=None):
     """Блок счётчиков: где сейчас, когда вводили, пора ли вводить.
 
-    Выбран раздел — показываем только его счётчики: в «Транспорте»
-    счётчику воды делать нечего.
+    Задан раздел — только его счётчики: в «Транспорте» счётчику
+    воды делать нечего.
     """
     строки = []
-    запрос = actions.visible_meters(user).select_related(
-        "item__category"
-    ).order_by("item__name", "name")
+    запрос = (
+        actions.visible_meters(user)
+        .select_related("item__category")
+        .order_by("item__name", "name")
+    )
     for счётчик in запрос:
-        if выбранный:
-            раздел = счётчик.item.category
-            ключ = str(раздел.pk) if раздел else БЕЗ_РАЗДЕЛА
-            if ключ != выбранный:
-                continue
+        if ключ is not None and _ключ(счётчик.item.category) != ключ:
+            continue
         оценка = estimate_meter(счётчик, today)
         if оценка is None:
             значение, давность = "показаний нет", "вводов ещё не было"
@@ -256,55 +306,106 @@ def _счётчики(user, today, выбранный=""):
     return строки
 
 
-def _назад(request, **хвост):
-    """Вернуться на экран, сохранив выбранный раздел.
+def _стоимость_у(request):
+    """Выполнение, которому ещё предлагаем дописать стоимость."""
+    номер = request.GET.get("стоимость")
+    if not (номер and номер.isdigit()):
+        return None
+    return Completion.objects.filter(
+        pk=номер, done_by=request.user, cost__isnull=True
+    ).first()
 
-    Адрес собирается целиком и кодируется: русские названия
-    параметров в заголовке перехода браузер иначе не поймёт.
+
+def _назад(request, **хвост):
+    """Вернуться туда, где нажали кнопку (правило 6).
+
+    Адрес приходит скрытым полем формы; чужие адреса не берём —
+    возвращаемся на главную.
     """
-    параметры = {}
-    раздел = request.POST.get("раздел") or ""
-    if раздел:
-        параметры["раздел"] = раздел
-    параметры.update(хвост)
-    адрес = reverse("home")
-    if параметры:
-        адрес = f"{адрес}?{urlencode(параметры)}"
+    адрес = request.POST.get("назад") or ""
+    if not url_has_allowed_host_and_scheme(
+        адрес, allowed_hosts={request.get_host()}, require_https=False
+    ):
+        адрес = reverse("home")
+    if хвост:
+        разделитель = "&" if "?" in адрес else "?"
+        адрес = f"{адрес}{разделитель}{urlencode(хвост)}"
     return redirect(адрес)
 
 
 @login_required
 def home(request):
-    """Главный экран: дела по срочности, разделы, счётчики."""
+    """Главная: плитки разделов и самое срочное под ними."""
     today = timezone.localdate()
     все_дела = _дела(request.user, today)
-    плашки = _плашки(все_дела)
-    выбранный = request.GET.get("раздел") or ""
-    if выбранный and not any(п.ключ == выбранный for п in плашки):
-        выбранный = ""  # раздел опустел — показываем всё
-    дела = [
-        д for д in все_дела if not выбранный or д.ключ_раздела == выбранный
+    горящие = [д for д in все_дела if д.просрочено or д.скоро]
+    спокойные = [
+        д
+        for д in все_дела
+        if д.группа == ГРУППА_ОБЫЧНЫЕ and not (д.просрочено or д.скоро)
     ]
-
-    # Выполнение, которому ещё можно дописать стоимость (правило 6).
-    стоимость_у = None
-    номер = request.GET.get("стоимость")
-    if номер and номер.isdigit():
-        стоимость_у = Completion.objects.filter(
-            pk=номер, done_by=request.user, cost__isnull=True
-        ).first()
-
     return render(
         request,
         "core/home.html",
         {
-            "дела": дела,
-            "плашки": плашки,
-            "выбранный": выбранный,
-            "счётчики": _счётчики(request.user, today, выбранный),
+            "плитки": _плитки(все_дела),
+            "дела": горящие + спокойные[:БЛИЖАЙШИХ_НА_ГЛАВНОЙ],
+            "всего_дел": len(все_дела),
             "варианты_откладывания": ВАРИАНТЫ_ОТКЛАДЫВАНИЯ,
-            "стоимость_у": стоимость_у,
+            "стоимость_у": _стоимость_у(request),
+            "назад": request.get_full_path(),
             "пусто": not все_дела,
+        },
+    )
+
+
+@login_required
+def all_tasks(request):
+    """Полный список по срочности — со счётчиками, как было."""
+    today = timezone.localdate()
+    дела = _дела(request.user, today)
+    return render(
+        request,
+        "core/all.html",
+        {
+            "дела": дела,
+            "счётчики": _счётчики(request.user, today),
+            "варианты_откладывания": ВАРИАНТЫ_ОТКЛАДЫВАНИЯ,
+            "стоимость_у": _стоимость_у(request),
+            "назад": request.get_full_path(),
+            "пусто": not дела,
+        },
+    )
+
+
+@login_required
+def section(request, key):
+    """Страница раздела: все его дела по срочности и его счётчики."""
+    today = timezone.localdate()
+    if key == БЕЗ_РАЗДЕЛА:
+        название = "Прочее"
+    else:
+        if not key.isdigit():
+            raise Http404
+        название = get_object_or_404(Category, pk=key).name
+    дела = [д for д in _дела(request.user, today) if д.ключ_раздела == key]
+    return render(
+        request,
+        "core/section.html",
+        {
+            "название": название,
+            "дела": дела,
+            "счёт": Плитка(
+                key,
+                название,
+                sum(1 for д in дела if д.просрочено),
+                sum(1 for д in дела if д.скоро),
+                len(дела),
+            ),
+            "счётчики": _счётчики(request.user, today, key),
+            "варианты_откладывания": ВАРИАНТЫ_ОТКЛАДЫВАНИЯ,
+            "стоимость_у": _стоимость_у(request),
+            "назад": request.get_full_path(),
         },
     )
 

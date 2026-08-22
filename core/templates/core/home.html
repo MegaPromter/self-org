@@ -1,21 +1,20 @@
-{# Главный экран — заметка «Главный экран». #}
+{# Главная — заметка «Разделы на главной»: плитки и самое срочное. #}
 {% extends "core/base.html" %}
 
 {% block содержимое %}
 
-{% if стоимость_у %}
-  <div class="сообщение success">
-    Сколько стоило? Можно пропустить.
-    <form action="{% url 'set_cost' стоимость_у.pk %}" method="post"
-          class="кнопки">
-      {% csrf_token %}
-      <input type="hidden" name="раздел" value="{{ выбранный }}">
-      <input type="text" name="значение" inputmode="decimal"
-             placeholder="например, 3500" autofocus>
-      <button type="submit" class="главная">Записать</button>
-    </form>
-  </div>
-{% endif %}
+{% include "core/_стоимость.html" %}
+
+<div class="плитки">
+  {% for плитка in плитки %}
+    <a class="плитка {{ плитка.цвет }}"
+       href="{% url 'section' плитка.ключ %}">
+      <span class="имя">{{ плитка.название }}</span>
+      <span class="счёт">{{ плитка.счёт }}</span>
+      {% if плитка.всего %}<span class="всего">всего {{ плитка.всего }}</span>{% endif %}
+    </a>
+  {% endfor %}
+</div>
 
 {% if пусто %}
   <p class="пусто">
@@ -24,93 +23,14 @@
     а напоминания придут в Telegram.
   </p>
 {% else %}
-
-  <div class="плашки">
-    {% for плашка in плашки %}
-      <a class="плашка {% if плашка.ключ == выбранный %}выбрана{% endif %}"
-         href="{% if плашка.ключ %}?раздел={{ плашка.ключ|urlencode }}{% else %}.{% endif %}">
-        {{ плашка.название }} {{ плашка.количество }}{% if плашка.просрочено %}
-        <span class="точка">•</span>{% endif %}
-      </a>
-    {% endfor %}
-  </div>
-
+  <h2>Самое срочное</h2>
   {% for дело in дела %}
-    <div class="карточка {{ дело.цвет }}">
-      <div class="заголовок">
-        <span class="имя">{{ дело.obligation.name }}</span>
-        <span class="метка {{ дело.цвет }}">{{ дело.метка }}</span>
-      </div>
-      <p class="подпись">{{ дело.подпись }}</p>
-      {% if дело.status.fraction is not None %}
-        <div class="полоска">
-          <div class="{{ дело.цвет }}" style="width: {{ дело.процент }}%"></div>
-        </div>
-      {% endif %}
-      {% if дело.status.message %}
-        <p class="фактура">{{ дело.status.message }}</p>
-      {% endif %}
-      {% for строка in дело.фактура %}
-        <p class="фактура">{{ строка }}{% if строка.file %}
-          · <a href="{{ строка.file.url }}">файл</a>{% endif %}</p>
-      {% endfor %}
-      <div class="кнопки">
-        <form action="{% url 'mark_done' дело.obligation.pk %}" method="post">
-          {% csrf_token %}
-          <input type="hidden" name="раздел" value="{{ выбранный }}">
-          <button type="submit" class="главная">Сделано</button>
-        </form>
-        {% if дело.отложено_до %}
-          <form action="{% url 'snooze' дело.obligation.pk %}" method="post">
-            {% csrf_token %}
-            <input type="hidden" name="раздел" value="{{ выбранный }}">
-            <input type="hidden" name="дней" value="0">
-            <button type="submit" class="мелкая">вернуть в список</button>
-          </form>
-        {% else %}
-          <span class="подпись">отложить:</span>
-          {% for дней in варианты_откладывания %}
-            <form action="{% url 'snooze' дело.obligation.pk %}" method="post">
-              {% csrf_token %}
-              <input type="hidden" name="раздел" value="{{ выбранный }}">
-              <input type="hidden" name="дней" value="{{ дней }}">
-              <button type="submit" class="мелкая">{{ дней }} дн</button>
-            </form>
-          {% endfor %}
-        {% endif %}
-      </div>
-    </div>
-  {% empty %}
-    <p class="пусто">В этом разделе дел нет.</p>
+    {% include "core/_дело.html" %}
   {% endfor %}
-{% endif %}
-
-{% if счётчики %}
-  <h2>Счётчики</h2>
-  {% for счётчик in счётчики %}
-    <div class="карточка {% if счётчик.пора %}soon{% endif %}">
-      <div class="заголовок">
-        <span>{{ счётчик.meter.name }} — {{ счётчик.meter.item }}</span>
-        {% if счётчик.пора %}
-          <span class="метка soon">пора ввести</span>
-        {% else %}
-          <span class="подпись">{{ счётчик.значение }}</span>
-        {% endif %}
-      </div>
-      <p class="подпись">
-        {% if счётчик.пора %}{{ счётчик.значение }} · {% endif %}
-        {{ счётчик.подпись }}
-      </p>
-      <form action="{% url 'add_reading' счётчик.meter.pk %}" method="post"
-            class="кнопки">
-        {% csrf_token %}
-        <input type="hidden" name="раздел" value="{{ выбранный }}">
-        <input type="text" name="значение" inputmode="decimal"
-               placeholder="новое показание">
-        <button type="submit">Записать</button>
-      </form>
-    </div>
-  {% endfor %}
+  <p class="подпись">
+    <a href="{% url 'all_tasks' %}">показать все дела ({{ всего_дел }})</a>
+    и счётчики
+  </p>
 {% endif %}
 
 {% endblock %}

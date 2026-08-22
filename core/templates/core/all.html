@@ -1,0 +1,28 @@
+{# Полный список дел по срочности — со счётчиками. #}
+{% extends "core/base.html" %}
+{% block title %}Все дела — Self-org{% endblock %}
+
+{% block содержимое %}
+
+{% include "core/_стоимость.html" %}
+
+<p class="подпись"><a href="{% url 'home' %}">← разделы</a></p>
+<div class="шапка-раздела">
+  <span class="название">Все дела</span>
+  <span class="подпись">по срочности</span>
+</div>
+
+{% if пусто %}
+  <p class="пусто">
+    Дел пока нет. Заведите предмет и обязательство в
+    <a href="/admin/">справочниках</a>.
+  </p>
+{% else %}
+  {% for дело in дела %}
+    {% include "core/_дело.html" %}
+  {% endfor %}
+{% endif %}
+
+{% include "core/_счётчики.html" %}
+
+{% endblock %}

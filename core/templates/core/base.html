@@ -75,15 +75,31 @@
     border: 1px solid #cfcdc6; border-radius: 8px; background: var(--лист);
     color: var(--текст); min-width: 0;
   }
-  .плашки { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1rem; }
-  .плашка {
-    font-size: 0.85rem; padding: 0.25rem 0.75rem; border-radius: 999px;
-    border: 1px solid #cfcdc6; text-decoration: none; color: var(--текст);
-    background: var(--лист);
+  /* Плитки разделов — главный вход на сайт. */
+  .плитки {
+    display: grid; gap: 0.5rem; margin-bottom: 1.2rem;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
   }
-  .плашка.выбрана { background: var(--текст); color: #fff; border-color: var(--текст); }
-  .плашка .точка { color: var(--красный); }
-  .плашка.выбрана .точка { color: #ff9c8f; }
+  .плитка {
+    display: flex; flex-direction: column; gap: 0.15rem;
+    background: var(--лист); border: 1px solid var(--рамка);
+    border-radius: 12px; padding: 0.6rem 0.75rem;
+    text-decoration: none; color: var(--текст);
+  }
+  .плитка:hover { border-color: #bfbdb5; }
+  .плитка.overdue { border-color: #e6b0aa; }
+  .плитка.soon { border-color: #f0d4a3; }
+  .плитка.empty { opacity: 0.55; }
+  .плитка .имя { font-weight: 600; font-size: 0.95rem; }
+  .плитка .счёт { font-size: 0.8rem; color: var(--серый); }
+  .плитка.overdue .счёт { color: var(--красный); }
+  .плитка.soon .счёт { color: var(--жёлтый); }
+  .плитка .всего { font-size: 0.78rem; color: #96948e; }
+  .шапка-раздела {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 0.6rem; margin: 0 0 0.8rem;
+  }
+  .шапка-раздела .название { font-size: 1.25rem; font-weight: 600; }
   .сообщение {
     border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.7rem;
     font-size: 0.9rem;

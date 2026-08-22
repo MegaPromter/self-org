@@ -1,0 +1,28 @@
+{# Блок счётчиков: где сейчас и поле ввода нового показания. #}
+{% if счётчики %}
+  <h2>Счётчики</h2>
+  {% for счётчик in счётчики %}
+    <div class="карточка {% if счётчик.пора %}soon{% endif %}">
+      <div class="заголовок">
+        <span>{{ счётчик.meter.name }} — {{ счётчик.meter.item }}</span>
+        {% if счётчик.пора %}
+          <span class="метка soon">пора ввести</span>
+        {% else %}
+          <span class="подпись">{{ счётчик.значение }}</span>
+        {% endif %}
+      </div>
+      <p class="подпись">
+        {% if счётчик.пора %}{{ счётчик.значение }} · {% endif %}
+        {{ счётчик.подпись }}
+      </p>
+      <form action="{% url 'add_reading' счётчик.meter.pk %}" method="post"
+            class="кнопки">
+        {% csrf_token %}
+        <input type="hidden" name="назад" value="{{ назад }}">
+        <input type="text" name="значение" inputmode="decimal"
+               placeholder="новое показание">
+        <button type="submit">Записать</button>
+      </form>
+    </div>
+  {% endfor %}
+{% endif %}

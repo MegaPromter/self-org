@@ -1,0 +1,48 @@
+{# Карточка дела — общая для главной, списка и раздела. #}
+<div class="карточка {{ дело.цвет }}">
+  <div class="заголовок">
+    <span class="имя">{{ дело.obligation.name }}</span>
+    <span class="метка {{ дело.цвет }}">{{ дело.метка }}</span>
+  </div>
+  <p class="подпись">
+    {% if без_раздела %}{{ дело.подпись_без_раздела }}
+    {% else %}{{ дело.подпись_полная }}{% endif %}
+  </p>
+  {% if дело.status.fraction is not None %}
+    <div class="полоска">
+      <div class="{{ дело.цвет }}" style="width: {{ дело.процент }}%"></div>
+    </div>
+  {% endif %}
+  {% if дело.status.message %}
+    <p class="фактура">{{ дело.status.message }}</p>
+  {% endif %}
+  {% for строка in дело.фактура %}
+    <p class="фактура">{{ строка }}{% if строка.file %}
+      · <a href="{{ строка.file.url }}">файл</a>{% endif %}</p>
+  {% endfor %}
+  <div class="кнопки">
+    <form action="{% url 'mark_done' дело.obligation.pk %}" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="назад" value="{{ назад }}">
+      <button type="submit" class="главная">Сделано</button>
+    </form>
+    {% if дело.отложено_до %}
+      <form action="{% url 'snooze' дело.obligation.pk %}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="назад" value="{{ назад }}">
+        <input type="hidden" name="дней" value="0">
+        <button type="submit" class="мелкая">вернуть в список</button>
+      </form>
+    {% else %}
+      <span class="подпись">отложить:</span>
+      {% for дней in варианты_откладывания %}
+        <form action="{% url 'snooze' дело.obligation.pk %}" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="назад" value="{{ назад }}">
+          <input type="hidden" name="дней" value="{{ дней }}">
+          <button type="submit" class="мелкая">{{ дней }} дн</button>
+        </form>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>

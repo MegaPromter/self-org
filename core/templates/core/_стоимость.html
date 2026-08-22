@@ -1,0 +1,14 @@
+{# Поле «сколько стоило» — появляется сразу после «Сделано». #}
+{% if стоимость_у %}
+  <div class="сообщение success">
+    Сколько стоило? Можно пропустить.
+    <form action="{% url 'set_cost' стоимость_у.pk %}" method="post"
+          class="кнопки">
+      {% csrf_token %}
+      <input type="hidden" name="назад" value="{{ назад }}">
+      <input type="text" name="значение" inputmode="decimal"
+             placeholder="например, 3500" autofocus>
+      <button type="submit" class="главная">Записать</button>
+    </form>
+  </div>
+{% endif %}

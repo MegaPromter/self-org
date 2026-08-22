@@ -194,7 +194,7 @@ def test_stoimost_otvetom_dopisyvaetsya_v_vypolnenie(масло, антон):
 
     выполнение = масло.completions.order_by("-id").first()
     assert выполнение.cost == Decimal(3500)
-    assert "3500" in ответ
+    assert "3 500" in ответ  # тысячи разделяются пробелом
     assert not PendingInput.objects.exists()  # вопрос закрыт
 
 
@@ -246,7 +246,7 @@ def test_vvod_pokazaniya_zapisyvaetsya(масло, антон):
     показание = масло.meter.readings.order_by("-id").first()
     assert показание.value == Decimal(118_500)
     assert показание.date == СЕГОДНЯ
-    assert "118500" in ответ.replace(" ", "")
+    assert "118500" in ответ.replace(" ", "").replace(" ", "")
 
 
 def test_pokazanie_menshe_proshlogo_prinimaetsya_s_preduprezhdeniem(
