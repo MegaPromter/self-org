@@ -36,9 +36,10 @@
 
 ## Запуск проекта
 
-- Простой (без Docker): `.venv\Scripts\python manage.py runserver`
-  → http://localhost:8000 — главный экран (вход учёткой из
-  админки), справочники — /admin/, база SQLite.
+- Простой (без Docker): `.venv\Scripts\python manage.py runserver
+  8010` → http://localhost:8010 — главный экран (вход учёткой
+  из админки), справочники — /admin/, база SQLite.
+  **Порт 8000 не занимать — он у другого проекта пользователя.**
 - Telegram-бот (отдельным окном): `.venv\Scripts\python manage.py
   run_bot`. Нужен токен от @BotFather в переменной окружения
   `TELEGRAM_BOT_TOKEN`; имя бота — в `TELEGRAM_BOT_USERNAME`

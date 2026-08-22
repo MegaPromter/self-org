@@ -10,7 +10,8 @@ services:
              (python manage.py createsuperuser --noinput || true) &&
              python manage.py runserver 0.0.0.0:8000"
     ports:
-      - "8000:8000"
+      # Наружу 8010: порт 8000 занят другим проектом пользователя.
+      - "8010:8000"
     volumes:
       - .:/app
     environment: &app-env
