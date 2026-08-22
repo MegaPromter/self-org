@@ -15,6 +15,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views.decorators.http import require_POST
 
@@ -108,17 +109,23 @@ class Дело:
 
 @dataclass
 class Плитка:
-    """Плитка раздела на главной."""
+    """Пункт меню (он же плитка на телефоне): раздел и его счёт."""
 
     ключ: str
     название: str
     просрочено: int
     скоро: int
     всего: int
+    адрес: str = ""
+    активен: bool = False
 
     @property
     def пусто(self):
         return self.всего == 0
+
+    @property
+    def горит(self):
+        return self.просрочено + self.скоро
 
     @property
     def цвет(self):
@@ -139,6 +146,38 @@ class Плитка:
         if части:
             return " · ".join(части)
         return "всё спокойно" if self.всего else "дел нет"
+
+    @property
+    def счёт_коротко(self):
+        """Для узкой колонки меню: «1 · 6» или «6», пусто — прочерк."""
+        if not self.всего:
+            return "—"
+        return f"{self.горит} · {self.всего}" if self.горит else str(self.всего)
+
+
+@dataclass
+class Сводка:
+    """Полоса чисел над содержимым: что горит и когда ближайший срок."""
+
+    просрочено: int
+    скоро: int
+    всего: int
+    ближайший: object = None
+    сегодня: object = None
+
+    @property
+    def ближайший_текст(self):
+        """«14 сентября», а для другого года — с годом: «22 августа 2027».
+
+        Без года дата из будущего года читается как завтрашняя.
+        """
+        if self.ближайший is None:
+            return "—"
+        тот_же_год = (
+            self.сегодня is not None
+            and self.ближайший.year == self.сегодня.year
+        )
+        return date_format(self.ближайший, "j E" if тот_же_год else "j E Y")
 
 
 @dataclass
@@ -264,6 +303,63 @@ def _плитки(дела):
     return плитки
 
 
+def _сводка(дела, today):
+    """Числа над содержимым: сколько горит и ближайший срок."""
+    сроки = [
+        д.status.due_date
+        for д in дела
+        if д.status.due_date and д.status.due_date >= today
+    ]
+    return Сводка(
+        просрочено=sum(1 for д in дела if д.просрочено),
+        скоро=sum(1 for д in дела if д.скоро),
+        всего=len(дела),
+        ближайший=min(сроки) if сроки else None,
+        сегодня=today,
+    )
+
+
+def _меню(все_дела, активный):
+    """Пункты меню: срочное, все дела и разделы со счётом.
+
+    То же меню на телефоне показывается плитками сверху —
+    разметка одна, вид разный (заметка «Десктопный макет»).
+    """
+    пункты = [
+        Плитка(
+            ключ="срочное",
+            название="Самое срочное",
+            просрочено=0,
+            скоро=0,
+            всего=0,
+            адрес=reverse("home"),
+            активен=активный == "срочное",
+        ),
+        Плитка(
+            ключ="все",
+            название="Все дела",
+            просрочено=sum(1 for д in все_дела if д.просрочено),
+            скоро=sum(1 for д in все_дела if д.скоро),
+            всего=len(все_дела),
+            адрес=reverse("all_tasks"),
+            активен=активный == "все",
+        ),
+    ]
+    пункты += [
+        Плитка(
+            п.ключ,
+            п.название,
+            п.просрочено,
+            п.скоро,
+            п.всего,
+            адрес=reverse("section", args=[п.ключ]),
+            активен=активный == п.ключ,
+        )
+        for п in _плитки(все_дела)
+    ]
+    return пункты
+
+
 def _счётчики(user, today, ключ=None):
     """Блок счётчиков: где сейчас, когда вводили, пора ли вводить.
 
@@ -333,9 +429,21 @@ def _назад(request, **хвост):
     return redirect(адрес)
 
 
+def _каркас(request, все_дела, показанные, today, активный, ключ=None):
+    """Общая обвязка страницы: меню, сводка, счётчики, адрес возврата."""
+    return {
+        "меню": _меню(все_дела, активный),
+        "сводка": _сводка(показанные, today),
+        "счётчики": _счётчики(request.user, today, ключ),
+        "варианты_откладывания": ВАРИАНТЫ_ОТКЛАДЫВАНИЯ,
+        "стоимость_у": _стоимость_у(request),
+        "назад": request.get_full_path(),
+    }
+
+
 @login_required
 def home(request):
-    """Главная: плитки разделов и самое срочное под ними."""
+    """Главная: самое срочное плюс несколько ближайших дел."""
     today = timezone.localdate()
     все_дела = _дела(request.user, today)
     горящие = [д for д in все_дела if д.просрочено or д.скоро]
@@ -344,19 +452,15 @@ def home(request):
         for д in все_дела
         if д.группа == ГРУППА_ОБЫЧНЫЕ and not (д.просрочено or д.скоро)
     ]
-    return render(
-        request,
-        "core/home.html",
+    контекст = _каркас(request, все_дела, все_дела, today, "срочное")
+    контекст.update(
         {
-            "плитки": _плитки(все_дела),
             "дела": горящие + спокойные[:БЛИЖАЙШИХ_НА_ГЛАВНОЙ],
             "всего_дел": len(все_дела),
-            "варианты_откладывания": ВАРИАНТЫ_ОТКЛАДЫВАНИЯ,
-            "стоимость_у": _стоимость_у(request),
-            "назад": request.get_full_path(),
             "пусто": not все_дела,
-        },
+        }
     )
+    return render(request, "core/home.html", контекст)
 
 
 @login_required
@@ -364,18 +468,9 @@ def all_tasks(request):
     """Полный список по срочности — со счётчиками, как было."""
     today = timezone.localdate()
     дела = _дела(request.user, today)
-    return render(
-        request,
-        "core/all.html",
-        {
-            "дела": дела,
-            "счётчики": _счётчики(request.user, today),
-            "варианты_откладывания": ВАРИАНТЫ_ОТКЛАДЫВАНИЯ,
-            "стоимость_у": _стоимость_у(request),
-            "назад": request.get_full_path(),
-            "пусто": not дела,
-        },
-    )
+    контекст = _каркас(request, дела, дела, today, "все")
+    контекст.update({"дела": дела, "пусто": not дела})
+    return render(request, "core/all.html", контекст)
 
 
 @login_required
@@ -388,26 +483,11 @@ def section(request, key):
         if not key.isdigit():
             raise Http404
         название = get_object_or_404(Category, pk=key).name
-    дела = [д for д in _дела(request.user, today) if д.ключ_раздела == key]
-    return render(
-        request,
-        "core/section.html",
-        {
-            "название": название,
-            "дела": дела,
-            "счёт": Плитка(
-                key,
-                название,
-                sum(1 for д in дела if д.просрочено),
-                sum(1 for д in дела if д.скоро),
-                len(дела),
-            ),
-            "счётчики": _счётчики(request.user, today, key),
-            "варианты_откладывания": ВАРИАНТЫ_ОТКЛАДЫВАНИЯ,
-            "стоимость_у": _стоимость_у(request),
-            "назад": request.get_full_path(),
-        },
-    )
+    все_дела = _дела(request.user, today)
+    дела = [д for д in все_дела if д.ключ_раздела == key]
+    контекст = _каркас(request, все_дела, дела, today, key, ключ=key)
+    контекст.update({"название": название, "дела": дела})
+    return render(request, "core/section.html", контекст)
 
 
 @require_POST

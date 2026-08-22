@@ -1,4 +1,4 @@
-{# Общая обёртка экранов: шапка, оформление, сообщения. #}
+{# Обёртка экранов: меню слева на компьютере, плитки на телефоне. #}
 <!doctype html>
 <html lang="ru">
 <head>
@@ -19,7 +19,7 @@
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     font-size: 16px; line-height: 1.45;
   }
-  .страница { max-width: 46rem; margin: 0 auto; padding: 1rem 0.9rem 3rem; }
+  .страница { max-width: 70rem; margin: 0 auto; padding: 1rem 0.9rem 3rem; }
   header {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 1rem; border-bottom: 1px solid var(--рамка);
@@ -30,12 +30,65 @@
     color: var(--серый); font-size: 0.85rem; text-decoration: none;
     background: none; border: none; cursor: pointer; padding: 0;
   }
+
+  /* Каркас: сводка, меню, содержимое, счётчики. На телефоне идут
+     сверху вниз в этом же порядке. */
+  .оболочка { display: grid; gap: 0.9rem; align-items: start; }
+  .сводка { grid-area: сводка; }
+  .меню { grid-area: меню; }
+  .содержимое { grid-area: содержимое; }
+  .счётчики { grid-area: счётчики; }
+  .оболочка {
+    grid-template-areas: "сводка" "меню" "содержимое" "счётчики";
+  }
+  .оболочка.одна-колонка { grid-template-areas: "содержимое"; }
+
+  .сводка { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .ячейка {
+    background: var(--лист); border: 1px solid var(--рамка);
+    border-radius: 12px; padding: 0.5rem 0.7rem;
+  }
+  .ячейка .подпись-числа {
+    font-size: 0.78rem; color: var(--серый); margin: 0;
+  }
+  .ячейка .число { font-size: 1.5rem; font-weight: 600; margin: 0; }
+  .ячейка .дата { font-size: 1rem; font-weight: 600; margin: 0.2rem 0 0; }
+  .ячейка.overdue { background: #fbeae8; border-color: #e6b0aa; }
+  .ячейка.overdue .число, .ячейка.overdue .подпись-числа { color: var(--красный); }
+  .ячейка.soon { background: #fdf3e2; border-color: #f0d4a3; }
+  .ячейка.soon .число, .ячейка.soon .подпись-числа { color: var(--жёлтый); }
+
+  /* Меню: на телефоне — плитки в сетку. */
+  .меню {
+    display: grid; gap: 0.4rem;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  }
+  .пункт {
+    display: flex; flex-direction: column; gap: 0.1rem;
+    background: var(--лист); border: 1px solid var(--рамка);
+    border-radius: 12px; padding: 0.5rem 0.7rem;
+    text-decoration: none; color: var(--текст);
+  }
+  .пункт:hover { border-color: #bfbdb5; }
+  .пункт.активен { border-color: var(--текст); }
+  .пункт.overdue { border-color: #e6b0aa; }
+  .пункт.soon { border-color: #f0d4a3; }
+  .пункт.empty { opacity: 0.55; }
+  .пункт .имя { font-weight: 600; font-size: 0.92rem; }
+  .пункт .счёт-широко { font-size: 0.78rem; color: var(--серый); }
+  .пункт .счёт-узко { display: none; }
+  .пункт.overdue .счёт-широко { color: var(--красный); }
+  .пункт.soon .счёт-широко { color: var(--жёлтый); }
+  .пункт .всего { font-size: 0.75rem; color: #96948e; }
+  .подпись-меню { display: none; }
+
   .карточка {
     background: var(--лист); border: 1px solid var(--рамка);
-    border-radius: 12px; padding: 0.7rem 0.85rem; margin-bottom: 0.7rem;
+    border-radius: 12px; padding: 0.7rem 0.85rem;
   }
   .карточка.overdue { border-color: #e6b0aa; }
   .карточка.soon { border-color: #f0d4a3; }
+  .список { display: grid; gap: 0.7rem; align-items: start; }
   .заголовок { display: flex; justify-content: space-between; gap: 0.5rem; }
   .имя { font-weight: 600; }
   .подпись { color: var(--серый); font-size: 0.85rem; margin: 0.1rem 0 0; }
@@ -75,26 +128,6 @@
     border: 1px solid #cfcdc6; border-radius: 8px; background: var(--лист);
     color: var(--текст); min-width: 0;
   }
-  /* Плитки разделов — главный вход на сайт. */
-  .плитки {
-    display: grid; gap: 0.5rem; margin-bottom: 1.2rem;
-    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-  }
-  .плитка {
-    display: flex; flex-direction: column; gap: 0.15rem;
-    background: var(--лист); border: 1px solid var(--рамка);
-    border-radius: 12px; padding: 0.6rem 0.75rem;
-    text-decoration: none; color: var(--текст);
-  }
-  .плитка:hover { border-color: #bfbdb5; }
-  .плитка.overdue { border-color: #e6b0aa; }
-  .плитка.soon { border-color: #f0d4a3; }
-  .плитка.empty { opacity: 0.55; }
-  .плитка .имя { font-weight: 600; font-size: 0.95rem; }
-  .плитка .счёт { font-size: 0.8rem; color: var(--серый); }
-  .плитка.overdue .счёт { color: var(--красный); }
-  .плитка.soon .счёт { color: var(--жёлтый); }
-  .плитка .всего { font-size: 0.78rem; color: #96948e; }
   .шапка-раздела {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 0.6rem; margin: 0 0 0.8rem;
@@ -108,9 +141,47 @@
   .сообщение.error { background: #fbeae8; color: #7f1d1d; }
   h2 {
     font-size: 0.8rem; font-weight: 600; color: var(--серый);
-    text-transform: none; margin: 1.4rem 0 0.5rem;
+    margin: 0 0 0.5rem;
   }
+  .счётчики h2 { margin-top: 0.4rem; }
   .пусто { color: var(--серый); font-size: 0.9rem; }
+
+  /* Экран пошире: меню становится колонкой слева, счётчики — под ним. */
+  @media (min-width: 60rem) {
+    .оболочка:not(.одна-колонка) {
+      grid-template-columns: 15rem minmax(0, 1fr);
+      grid-template-areas:
+        "сводка сводка"
+        "меню содержимое"
+        "счётчики содержимое";
+      column-gap: 1.2rem;
+    }
+    .сводка { grid-template-columns: repeat(4, 1fr); }
+    .меню { grid-template-columns: 1fr; gap: 0.15rem; }
+    .пункт {
+      flex-direction: row; align-items: baseline; gap: 0.5rem;
+      border: none; border-radius: 8px; padding: 0.35rem 0.6rem;
+      background: none;
+    }
+    .пункт:hover { background: #eeece7; border: none; }
+    .пункт.активен { background: var(--текст); color: #fff; }
+    .пункт.активен .счёт-узко { color: #d9d7d1; }
+    .пункт .имя { font-weight: 500; font-size: 0.9rem; flex: 1; }
+    .пункт .счёт-узко { display: inline; font-size: 0.8rem; color: var(--серый); }
+    .пункт.overdue .счёт-узко { color: var(--красный); }
+    .пункт.soon .счёт-узко { color: var(--жёлтый); }
+    .пункт .счёт-широко, .пункт .всего { display: none; }
+    .пункт.empty { opacity: 0.5; }
+    .подпись-меню {
+      display: block; font-size: 0.75rem; color: #96948e;
+      margin: 0.6rem 0 0.1rem; padding-left: 0.6rem;
+    }
+  }
+
+  /* Совсем широкий — карточки дел в две колонки. */
+  @media (min-width: 75rem) {
+    .список { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
 </style>
 </head>
 <body>
@@ -130,7 +201,15 @@
   {% for сообщение in messages %}
     <div class="сообщение {{ сообщение.tags }}">{{ сообщение }}</div>
   {% endfor %}
-  {% block содержимое %}{% endblock %}
+  {% include "core/_стоимость.html" %}
+  <div class="оболочка {% if not меню %}одна-колонка{% endif %}">
+    {% if меню %}
+      {% include "core/_сводка.html" %}
+      {% include "core/_меню.html" %}
+    {% endif %}
+    <div class="содержимое">{% block содержимое %}{% endblock %}</div>
+    {% if меню %}{% include "core/_счётчики.html" %}{% endif %}
+  </div>
 </div>
 </body>
 </html>
