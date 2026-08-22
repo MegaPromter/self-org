@@ -3,9 +3,12 @@
 Показания и выполнения заполняются прямо на странице счётчика
 и обязательства; фактура — на странице любой сущности.
 """
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.admin import GenericTabularInline
+from django.utils.html import format_html
 
+from .bot_actions import make_link_code
 from .models import (
     Completion,
     Fact,
@@ -17,7 +20,7 @@ from .models import (
     Obligation,
     Person,
 )
-from .status import compute_status
+from .status import compute_status, short_number
 
 admin.site.site_header = "Self-org"
 admin.site.site_title = "Self-org"
@@ -67,12 +70,6 @@ class PersonAdmin(admin.ModelAdmin):
     inlines = [FactInline]
 
 
-def _short_number(value):
-    """Число без хвостовых нулей: 400.00 → «400», 12.50 → «12.5»."""
-    text = f"{value:.2f}".rstrip("0").rstrip(".")
-    return text
-
-
 @admin.register(Obligation)
 class ObligationAdmin(admin.ModelAdmin):
     list_display = ["name", "state", "left", "rule_kind", "item", "owner"]
@@ -100,7 +97,13 @@ class ObligationAdmin(admin.ModelAdmin):
         ),
         (
             "Напоминания",
-            {"fields": ["soon_threshold_percent", "overdue_repeat_days"]},
+            {
+                "fields": [
+                    "soon_threshold_percent",
+                    "overdue_repeat_days",
+                    "snoozed_until",
+                ]
+            },
         ),
         ("Семья", {"fields": ["owner", "assignee", "is_private"]}),
     ]
@@ -122,7 +125,7 @@ class ObligationAdmin(admin.ModelAdmin):
         if статус.meter_left is not None:
             префикс = "≈ " if статус.is_estimate else ""
             части.append(
-                f"{префикс}{_short_number(статус.meter_left)}"
+                f"{префикс}{short_number(статус.meter_left)}"
                 f" {статус.meter_unit}"
             )
         if статус.days_left is not None:
@@ -138,6 +141,38 @@ class NotificationProfileAdmin(admin.ModelAdmin):
         "quiet_hours_start",
         "quiet_hours_end",
     ]
+    readonly_fields = ["подключение"]
+    fields = [
+        "user",
+        "подключение",
+        "telegram_chat_id",
+        "quiet_hours_start",
+        "quiet_hours_end",
+    ]
+
+    @admin.display(description="подключение Telegram")
+    def подключение(self, obj):
+        """Ссылка привязки чата — или подсказка, если бот не назван."""
+        if obj is None or obj.pk is None:
+            return "Сохраните настройки — появится ссылка привязки."
+        if obj.telegram_chat_id:
+            return (
+                "Подключено. Чтобы отвязать — очистите поле "
+                "«Telegram chat id» ниже и сохраните."
+            )
+        код = make_link_code(obj.user_id)
+        if settings.TELEGRAM_BOT_USERNAME:
+            return format_html(
+                '<a href="https://t.me/{}?start={}" target="_blank">'
+                "Подключить Telegram</a> — ссылка действует 7 дней.",
+                settings.TELEGRAM_BOT_USERNAME,
+                код,
+            )
+        return format_html(
+            "Отправьте боту сообщение: <code>/start {}</code> "
+            "(код действует 7 дней).",
+            код,
+        )
 
 
 @admin.register(Notification)

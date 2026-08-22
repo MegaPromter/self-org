@@ -38,8 +38,12 @@
 
 - Простой (без Docker): `.venv\Scripts\python manage.py runserver`
   → http://localhost:8000 — сайт и админка, база SQLite.
+- Telegram-бот (отдельным окном): `.venv\Scripts\python manage.py
+  run_bot`. Нужен токен от @BotFather в переменной окружения
+  `TELEGRAM_BOT_TOKEN`; имя бота — в `TELEGRAM_BOT_USERNAME`
+  (тогда в админке появится ссылка привязки чата).
 - Полный: `docker compose up` — сайт + PostgreSQL + планировщик
-  Celery, как на сервере.
+  Celery + бот, как на сервере.
 
 ## Запуск тестов
 

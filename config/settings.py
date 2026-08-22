@@ -108,6 +108,14 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Telegram: токен бота от @BotFather. Не задан — бот не запускается,
+# сайт и планировщик работают как раньше, уведомления копятся
+# в журнале (правило 9 заметки «Telegram-бот»).
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+# Имя бота без «@» — из него собирается ссылка привязки в админке.
+# Не задано — админка покажет код и команду для ручного ввода.
+TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
+
 # Celery: адрес Redis — «почтового ящика» между сайтом
 # и планировщиком. Используется только в полном запуске.
 CELERY_BROKER_URL = os.environ.get(

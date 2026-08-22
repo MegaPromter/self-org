@@ -242,6 +242,15 @@ class Obligation(models.Model):
     overdue_repeat_days = models.PositiveIntegerField(
         "повтор о просроченном, дней", default=7
     )
+    snoozed_until = models.DateField(
+        "отложено до",
+        null=True,
+        blank=True,
+        help_text=(
+            "До этой даты напоминаний не будет — ставится кнопкой "
+            "«Отложить» в Telegram. Пусто — напоминаем как обычно."
+        ),
+    )
 
     # --- Семья ---------------------------------------------------------
     # Владельца нельзя удалить, не решив судьбу его обязательств.
@@ -412,6 +421,10 @@ class Notification(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "ожидает"
         SENT = "sent", "отправлено"
+        # Залежавшееся не отправляем: подключив бота, пользователь
+        # не должен получить пачку старых напоминаний — актуальные
+        # планировщик создаст заново (заметка «Telegram-бот»).
+        STALE = "stale", "устарело"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -457,3 +470,47 @@ class Notification(models.Model):
 
     def __str__(self):
         return self.text
+
+
+class PendingInput(models.Model):
+    """Чего бот ждёт ответным сообщением: стоимость или показание.
+
+    Живёт от нажатия кнопки до ответа пользователя. Хранится
+    в базе, а не в памяти процесса, чтобы перезапуск бота не терял
+    начатый разговор. У человека одно ожидание за раз — новая
+    кнопка заменяет старое.
+    """
+
+    class Kind(models.TextChoices):
+        COST = "cost", "стоимость выполнения"
+        READING = "reading", "показание счётчика"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pending_input",
+        verbose_name="кого спросили",
+    )
+    kind = models.CharField("что спросили", max_length=10, choices=Kind.choices)
+    completion = models.ForeignKey(
+        Completion,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name="выполнение",
+    )
+    meter = models.ForeignKey(
+        Meter,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name="счётчик",
+    )
+    created_at = models.DateTimeField("спрошено", default=timezone.now)
+
+    class Meta:
+        verbose_name = "ожидание ответа"
+        verbose_name_plural = "ожидания ответа"
+
+    def __str__(self):
+        return f"{self.user}: {self.get_kind_display()}"

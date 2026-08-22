@@ -18,5 +18,6 @@ class Command(BaseCommand):
         итог = planner.run()
         self.stdout.write(
             f"создано уведомлений: {итог.created}, "
-            f"отправлено: {итог.sent}"
+            f"отправлено: {итог.sent}, "
+            f"устарело: {итог.stale}"
         )

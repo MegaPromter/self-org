@@ -15,36 +15,54 @@ from dataclasses import dataclass
 from django.utils import timezone
 
 from .models import Meter, Notification, NotificationProfile, Obligation
-from .status import State, compute_status, needs_reading
+from .status import State, compute_status, needs_reading, short_number
 
 # Повтор «введите показания» — не чаще раза в неделю, как
 # и повтор о просроченном по умолчанию (правило 3 заметки).
 READING_REPEAT_DAYS = 7
 
+# Уведомление, не ушедшее за сутки после «не раньше», устарело:
+# подключив бота, пользователь не должен получить пачку старых
+# напоминаний (правило 3 заметки «Telegram-бот»).
+STALE_AFTER = datetime.timedelta(days=1)
+
 # Каналы отправки: функции «уведомление → принято?». Telegram
-# зарегистрируется здесь в задаче бота.
+# регистрируется при старте приложения (`core/apps.py`).
 _channels = []
 
 
 def register_channel(channel):
     """Подключить канал отправки (функция: Notification → bool)."""
-    _channels.append(channel)
+    if channel not in _channels:
+        _channels.append(channel)
 
 
 @dataclass
 class RunResult:
-    """Итог прогона: сколько уведомлений создано и отправлено."""
+    """Итог прогона: создано, отправлено, помечено устаревшими."""
 
     created: int
     sent: int
+    stale: int = 0
 
 
 def run(now: datetime.datetime | None = None) -> RunResult:
     """Один прогон планировщика: проверить сроки, отправить готовое."""
     now = now or timezone.now()
+    # Сначала устаревание: дальше залежавшиеся уже не мешают
+    # ни защите от дублей, ни отправке.
+    устарело = _пометить_устаревшие(now)
     создано = _проверить_обязательства(now) + _проверить_счётчики(now)
     отправлено = _отправить_готовые(now)
-    return RunResult(создано, отправлено)
+    return RunResult(создано, отправлено, устарело)
+
+
+def _пометить_устаревшие(now):
+    """Пометить «устарело» всё, что не ушло за сутки после срока."""
+    return Notification.objects.filter(
+        status=Notification.Status.PENDING,
+        not_before__lt=now - STALE_AFTER,
+    ).update(status=Notification.Status.STALE)
 
 
 # --- Тихие часы (правило 7 заметки) ----------------------------------------
@@ -113,6 +131,13 @@ def _проверить_обязательства(now):
     for обязательство in Obligation.objects.select_related(
         "meter", "assignee", "owner"
     ):
+        # Отложено кнопкой в Telegram — молчим до выбранной даты
+        # (правило 5 заметки «Telegram-бот»).
+        if (
+            обязательство.snoozed_until
+            and today < обязательство.snoozed_until
+        ):
+            continue
         статус = compute_status(обязательство, today)
         if статус.state not in (State.SOON, State.OVERDUE):
             continue
@@ -122,8 +147,11 @@ def _проверить_обязательства(now):
             if статус.state is State.SOON
             else Notification.Kind.OVERDUE
         )
+        # Устаревшие в расчёт не идут: их никто не увидел, значит
+        # напомнить надо заново.
         последнее = (
             обязательство.notifications.filter(user=получатель, kind=вид)
+            .exclude(status=Notification.Status.STALE)
             .order_by("-created_at")
             .first()
         )
@@ -170,6 +198,7 @@ def _проверить_счётчики(now):
                 счётчик.notifications.filter(
                     user=получатель, kind=Notification.Kind.READING
                 )
+                .exclude(status=Notification.Status.STALE)
                 .order_by("-created_at")
                 .first()
             )
@@ -193,11 +222,6 @@ def _проверить_счётчики(now):
 # --- Тексты напоминаний ----------------------------------------------------
 
 
-def _числом(value):
-    """Число без хвостовых нулей: 400.00 → «400», 12.50 → «12.5»."""
-    return f"{value:.2f}".rstrip("0").rstrip(".")
-
-
 def _текст(обязательство, статус):
     """Текст напоминания; по оценке — просьба сверить (правило 4)."""
     скоро = статус.state is State.SOON
@@ -213,7 +237,9 @@ def _текст(обязательство, статус):
         )
     части = []
     if статус.meter_left is not None:
-        значение = f"{_числом(abs(статус.meter_left))} {статус.meter_unit}"
+        значение = (
+            f"{short_number(abs(статус.meter_left))} {статус.meter_unit}"
+        )
         части.append(
             f"осталось {значение}"
             if статус.meter_left >= 0
