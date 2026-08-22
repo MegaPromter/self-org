@@ -1,0 +1,31 @@
+{# Фактура: где лежит, номер, цена, файл. #}
+<h2>Фактура</h2>
+{% for строка in фактура %}
+  <div class="карточка строка" style="margin-bottom: 0.5rem;">
+    <div>
+      <span class="имя">{{ строка.name }}</span>
+      {% if строка.value %}<p class="подпись">{{ строка.value }}</p>{% endif %}
+      {% if строка.file %}
+        <p class="подпись"><a href="{{ строка.file.url }}">файл</a></p>
+      {% endif %}
+    </div>
+    <form method="post" action="{% url 'fact_delete' строка.pk %}"
+          onsubmit="return confirm('Удалить строку фактуры?')">
+      {% csrf_token %}
+      <input type="hidden" name="назад" value="{{ назад }}">
+      <button type="submit" class="мелкая">удалить</button>
+    </form>
+  </div>
+{% empty %}
+  <p class="пусто">Пока пусто: сюда пишут номер детали, где лежит, цену.</p>
+{% endfor %}
+
+<form method="post" action="{% url 'fact_add' вид_хозяина номер_хозяина %}"
+      class="карточка форма" enctype="multipart/form-data">
+  {% csrf_token %}
+  <input type="hidden" name="назад" value="{{ назад }}">
+  {% include "core/_поле.html" with поле=форма_фактуры.name %}
+  {% include "core/_поле.html" with поле=форма_фактуры.value %}
+  {% include "core/_поле.html" with поле=форма_фактуры.file %}
+  <div class="кнопки"><button type="submit">Добавить строку</button></div>
+</form>

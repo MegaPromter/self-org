@@ -1,0 +1,52 @@
+{# Счётчик: история показаний и что от него зависит. #}
+{% extends "core/base.html" %}
+{% block title %}{{ счётчик.name }} — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="шапка-раздела">
+  <span class="название">{{ счётчик.name }}</span>
+  <span class="подпись">
+    {{ счётчик.item }} · <a href="{% url 'meter_edit' счётчик.pk %}">править</a>
+  </span>
+</div>
+<p class="подпись">
+  Сейчас: {% if по_оценке %}≈ {% endif %}{{ оценка_значение }}
+  {% if по_оценке %}(по расчёту){% endif %}
+</p>
+
+<h2>Записать показание</h2>
+<form method="post" action="{% url 'reading_add_dated' счётчик.pk %}"
+      class="карточка форма">
+  {% csrf_token %}
+  {% include "core/_поле.html" with поле=форма_показания.value %}
+  {% include "core/_поле.html" with поле=форма_показания.date %}
+  <div class="кнопки"><button type="submit" class="главная">Записать</button></div>
+</form>
+
+<h2>История показаний</h2>
+{% for показание in показания %}
+  <div class="карточка строка" style="margin-bottom: 0.5rem;">
+    <div>
+      <span class="имя">{{ показание.value|floatformat:"-2" }} {{ счётчик.unit }}</span>
+      <p class="подпись">{{ показание.date|date:"j E Y" }}</p>
+    </div>
+    <form method="post" action="{% url 'reading_delete' показание.pk %}"
+          onsubmit="return confirm('Удалить показание? Расчёты пересчитаются.')">
+      {% csrf_token %}
+      <button type="submit" class="мелкая">удалить</button>
+    </form>
+  </div>
+{% empty %}
+  <p class="пусто">Показаний ещё не вводили.</p>
+{% endfor %}
+
+<h2>Дела по этому счётчику</h2>
+{% for дело in дела_счётчика %}
+  <div class="карточка строка" style="margin-bottom: 0.5rem;">
+    <a class="имя" href="{% url 'obligation' дело.pk %}">{{ дело.name }}</a>
+    <span class="подпись">каждые {{ дело.meter_interval|floatformat:"-2" }} {{ счётчик.unit }}</span>
+  </div>
+{% empty %}
+  <p class="пусто">Пока ни одно дело на него не смотрит.</p>
+{% endfor %}
+{% endblock %}

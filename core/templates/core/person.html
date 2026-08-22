@@ -1,0 +1,30 @@
+{# Человек: дела и фактура. #}
+{% extends "core/base.html" %}
+{% block title %}{{ человек.name }} — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="шапка-раздела">
+  <span class="название">{{ человек.name }}</span>
+  <span class="подпись">
+    {% if человек.birth_date %}
+      день рождения {{ человек.birth_date|date:"j E Y" }} ·
+    {% endif %}
+    <a href="{% url 'person_edit' человек.pk %}">править</a>
+  </span>
+</div>
+{% if человек.notes %}<p class="подпись">{{ человек.notes }}</p>{% endif %}
+
+<h2>Дела
+  <a class="добавить" href="{% url 'obligation_new' %}?назад={{ назад|urlencode }}">+ добавить</a>
+</h2>
+{% for дело in дела_человека %}
+  <div class="карточка строка" style="margin-bottom: 0.5rem;">
+    <a class="имя" href="{% url 'obligation' дело.pk %}">{{ дело.name }}</a>
+    <span class="подпись">{{ дело.get_rule_kind_display }}</span>
+  </div>
+{% empty %}
+  <p class="пусто">С этим человеком дел пока нет.</p>
+{% endfor %}
+
+{% include "core/_фактура.html" %}
+{% endblock %}

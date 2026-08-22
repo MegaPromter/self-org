@@ -1,0 +1,39 @@
+{# Простая форма справочника: все поля подряд. #}
+{% extends "core/base.html" %}
+{% block title %}{{ заголовок }} — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="шапка-раздела">
+  <span class="название">{{ заголовок }}</span>
+  <span class="подпись"><a href="{{ назад }}">← назад</a></span>
+</div>
+
+{% if форма.non_field_errors %}
+  <div class="сообщение error">{{ форма.non_field_errors }}</div>
+{% endif %}
+
+<form method="post" class="карточка форма" enctype="multipart/form-data">
+  {% csrf_token %}
+  <input type="hidden" name="назад" value="{{ назад }}">
+  {% for поле in форма %}
+    {% include "core/_поле.html" with поле=поле %}
+  {% endfor %}
+  <div class="кнопки">
+    <button type="submit" class="главная">Сохранить</button>
+    <a class="подпись" href="{{ назад }}">отмена</a>
+  </div>
+</form>
+
+{% if адрес_удаления %}
+  <form method="post" action="{{ адрес_удаления }}" class="карточка"
+        onsubmit="return confirm('Удалить запись? Связанные с ней дела тоже исчезнут.')">
+    {% csrf_token %}
+    <p class="подпись">
+      Удаление уберёт запись и всё, что на ней держится: дела
+      предмета или человека, показания счётчика. Счётчик, на который
+      смотрит правило срока, удалить нельзя.
+    </p>
+    <div class="кнопки"><button type="submit">Удалить</button></div>
+  </form>
+{% endif %}
+{% endblock %}

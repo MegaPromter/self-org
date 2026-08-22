@@ -16,6 +16,8 @@
   <p class="пусто">Дело закрыто — разовое и уже выполнено.</p>
 {% endif %}
 
+{% include "core/_фактура.html" %}
+
 <h2>Отметить выполнение</h2>
 <form method="post" action="{% url 'completion_add' обязательство.pk %}"
       class="карточка форма">

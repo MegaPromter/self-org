@@ -11,6 +11,8 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import ProtectedError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -20,8 +22,26 @@ from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views.decorators.http import require_POST
 
 from . import actions
-from .forms import CompletionForm, ObligationForm
-from .models import Category, Completion
+from .forms import (
+    CategoryForm,
+    CompletionForm,
+    FactForm,
+    ItemForm,
+    MeterForm,
+    MeterReadingForm,
+    ObligationForm,
+    PersonForm,
+)
+from .models import (
+    Category,
+    Completion,
+    Fact,
+    Item,
+    Meter,
+    MeterReading,
+    Obligation,
+    Person,
+)
 from .status import (
     State,
     compute_status,
@@ -678,6 +698,10 @@ def obligation_detail(request, pk):
             "форма_выполнения": CompletionForm(
                 initial={"date": today}, prefix="в"
             ),
+            "фактура": обязательство.facts.all(),
+            "форма_фактуры": FactForm(prefix="ф"),
+            "вид_хозяина": "obligation",
+            "номер_хозяина": обязательство.pk,
             "статус": compute_status(обязательство, today),
         }
     )
@@ -729,3 +753,290 @@ def completion_delete(request, pk):
     выполнение.delete()
     messages.success(request, "Отметка удалена, сроки пересчитаны.")
     return redirect("obligation", pk=дело.pk)
+
+
+# --- Справочники: предметы, люди, счётчики, разделы, фактура ----------------
+#
+# Заход 2 заметки «Заведение данных без админки»: всё, что раньше
+# заводилось только в админке, теперь имеет свой экран.
+
+
+@login_required
+def catalog(request):
+    """Справочники одной страницей: предметы, люди, счётчики, разделы."""
+    today = timezone.localdate()
+    все_дела = _дела(request.user, today)
+    контекст = _каркас(request, все_дела, все_дела, today, активный=None)
+    контекст.update(
+        {
+            "предметы": Item.objects.select_related("category").prefetch_related(
+                "meters"
+            ),
+            "люди": Person.objects.all(),
+            "счётчики_справочника": Meter.objects.select_related("item"),
+            "разделы": Category.objects.all(),
+        }
+    )
+    return render(request, "core/catalog.html", контекст)
+
+
+def _страница_справочника(request, шаблон, данные):
+    """Страница справочника в общем каркасе (меню, сводка, счётчики)."""
+    today = timezone.localdate()
+    все_дела = _дела(request.user, today)
+    контекст = _каркас(request, все_дела, все_дела, today, активный=None)
+    контекст.update(данные)
+    return render(request, шаблон, контекст)
+
+
+def _создать_или_поправить(request, модель, класс_формы, заголовок, pk=None):
+    """Общая страница «создать/править» для простых справочников."""
+    объект = get_object_or_404(модель, pk=pk) if pk else None
+    назад = request.GET.get("назад") or reverse("catalog")
+    if request.method == "POST":
+        форма = класс_формы(request.POST, instance=объект)
+        if форма.is_valid():
+            запись = форма.save()
+            messages.success(request, f"«{запись}» — сохранено.")
+            return _вернуться(request, назад)
+    else:
+        форма = класс_формы(instance=объект, initial=dict(request.GET.items()))
+    удаление = None
+    if объект is not None:
+        удаление = reverse(
+            модель._meta.model_name + "_delete", args=[объект.pk]
+        )
+    return _страница_справочника(
+        request,
+        "core/form_simple.html",
+        {
+            "форма": форма,
+            "заголовок": заголовок if объект is None else f"Правка: {объект}",
+            "назад": назад,
+            "адрес_удаления": удаление,
+        },
+    )
+
+
+@login_required
+def item_new(request):
+    return _создать_или_поправить(request, Item, ItemForm, "Новый предмет")
+
+
+@login_required
+def item_edit(request, pk):
+    return _создать_или_поправить(request, Item, ItemForm, "", pk)
+
+
+@login_required
+def person_new(request):
+    return _создать_или_поправить(request, Person, PersonForm, "Новый человек")
+
+
+@login_required
+def person_edit(request, pk):
+    return _создать_или_поправить(request, Person, PersonForm, "", pk)
+
+
+@login_required
+def meter_new(request):
+    return _создать_или_поправить(request, Meter, MeterForm, "Новый счётчик")
+
+
+@login_required
+def meter_edit(request, pk):
+    return _создать_или_поправить(request, Meter, MeterForm, "", pk)
+
+
+@login_required
+def category_new(request):
+    return _создать_или_поправить(
+        request, Category, CategoryForm, "Новый раздел"
+    )
+
+
+@login_required
+def category_edit(request, pk):
+    return _создать_или_поправить(request, Category, CategoryForm, "", pk)
+
+
+@login_required
+def item_detail(request, pk):
+    """Предмет: его счётчики, дела и фактура."""
+    предмет = get_object_or_404(Item, pk=pk)
+    return _страница_справочника(
+        request,
+        "core/item.html",
+        {
+            "предмет": предмет,
+            "счётчики_предмета": предмет.meters.all(),
+            "дела_предмета": actions.visible_obligations(request.user).filter(
+                item=предмет
+            ),
+            "фактура": предмет.facts.all(),
+            "форма_фактуры": FactForm(prefix="ф"),
+            "вид_хозяина": "item",
+            "номер_хозяина": предмет.pk,
+        },
+    )
+
+
+@login_required
+def person_detail(request, pk):
+    """Человек: его дела и фактура."""
+    человек = get_object_or_404(Person, pk=pk)
+    return _страница_справочника(
+        request,
+        "core/person.html",
+        {
+            "человек": человек,
+            "дела_человека": actions.visible_obligations(request.user).filter(
+                person=человек
+            ),
+            "фактура": человек.facts.all(),
+            "форма_фактуры": FactForm(prefix="ф"),
+            "вид_хозяина": "person",
+            "номер_хозяина": человек.pk,
+        },
+    )
+
+
+@login_required
+def meter_detail(request, pk):
+    """Счётчик: история показаний и что от него зависит."""
+    счётчик = get_object_or_404(Meter.objects.select_related("item"), pk=pk)
+    today = timezone.localdate()
+    оценка = estimate_meter(счётчик, today)
+    return _страница_справочника(
+        request,
+        "core/meter.html",
+        {
+            "счётчик": счётчик,
+            "показания": счётчик.readings.all(),
+            "оценка_значение": (
+                f"{short_number(оценка.value)} {счётчик.unit}"
+                if оценка
+                else "показаний нет"
+            ),
+            "по_оценке": оценка.is_estimate if оценка else False,
+            "дела_счётчика": actions.visible_obligations(request.user).filter(
+                meter=счётчик
+            ),
+            "форма_показания": MeterReadingForm(
+                initial={"date": today}, prefix="п"
+            ),
+        },
+    )
+
+
+@require_POST
+@login_required
+def reading_add_dated(request, pk):
+    """Добавить показание с датой — в том числе задним числом."""
+    счётчик = get_object_or_404(Meter, pk=pk)
+    форма = MeterReadingForm(request.POST, prefix="п")
+    if форма.is_valid():
+        показание = форма.save(commit=False)
+        показание.meter = счётчик
+        показание.save()
+        messages.success(request, f"Записано: {показание}.")
+    else:
+        messages.error(request, "Проверьте число и дату — не записано.")
+    return redirect("meter", pk=счётчик.pk)
+
+
+@require_POST
+@login_required
+def reading_delete(request, pk):
+    """Удалить ошибочное показание."""
+    показание = get_object_or_404(MeterReading, pk=pk)
+    номер_счётчика = показание.meter_id
+    показание.delete()
+    messages.success(request, "Показание удалено, расчёты пересчитаны.")
+    return redirect("meter", pk=номер_счётчика)
+
+
+def _удалить(request, модель, pk, куда, что_мешает=""):
+    """Удаление записи справочника с понятным отказом при защите."""
+    объект = get_object_or_404(модель, pk=pk)
+    имя = str(объект)
+    try:
+        объект.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            f"«{имя}» не удалить: {что_мешает}. Сначала уберите их "
+            f"или переведите на другую запись.",
+        )
+        return redirect(куда)
+    messages.success(request, f"«{имя}» — удалено.")
+    return redirect(куда)
+
+
+@require_POST
+@login_required
+def item_delete(request, pk):
+    return _удалить(request, Item, pk, reverse("catalog"))
+
+
+@require_POST
+@login_required
+def person_delete(request, pk):
+    return _удалить(request, Person, pk, reverse("catalog"))
+
+
+@require_POST
+@login_required
+def meter_delete(request, pk):
+    return _удалить(
+        request,
+        Meter,
+        pk,
+        reverse("catalog"),
+        что_мешает="на него смотрят правила срока",
+    )
+
+
+@require_POST
+@login_required
+def category_delete(request, pk):
+    return _удалить(request, Category, pk, reverse("catalog"))
+
+
+# --- Фактура: «где лежит, номер, цена» у предмета, человека, дела -----------
+
+ХОЗЯЕВА_ФАКТУРЫ = {
+    "item": (Item, "item"),
+    "person": (Person, "person"),
+    "obligation": (Obligation, "obligation"),
+}
+
+
+@require_POST
+@login_required
+def fact_add(request, вид, pk):
+    """Добавить строку фактуры к предмету, человеку или делу."""
+    if вид not in ХОЗЯЕВА_ФАКТУРЫ:
+        raise Http404
+    модель, имя_страницы = ХОЗЯЕВА_ФАКТУРЫ[вид]
+    хозяин = get_object_or_404(модель, pk=pk)
+    форма = FactForm(request.POST, request.FILES, prefix="ф")
+    if форма.is_valid():
+        строка = форма.save(commit=False)
+        строка.content_type = ContentType.objects.get_for_model(модель)
+        строка.object_id = хозяин.pk
+        строка.save()
+        messages.success(request, f"Фактура дополнена: {строка}.")
+    else:
+        messages.error(request, "Название обязательно — строка не добавлена.")
+    return redirect(имя_страницы, pk=pk)
+
+
+@require_POST
+@login_required
+def fact_delete(request, pk):
+    """Удалить строку фактуры."""
+    строка = get_object_or_404(Fact, pk=pk)
+    строка.delete()
+    messages.success(request, "Строка фактуры удалена.")
+    return _вернуться(request, reverse("catalog"))

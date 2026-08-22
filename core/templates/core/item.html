@@ -1,0 +1,40 @@
+{# Предмет: счётчики, дела, фактура. #}
+{% extends "core/base.html" %}
+{% block title %}{{ предмет.name }} — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="шапка-раздела">
+  <span class="название">{{ предмет.name }}</span>
+  <span class="подпись">
+    {% if предмет.category %}{{ предмет.category }} · {% endif %}
+    <a href="{% url 'item_edit' предмет.pk %}">править</a>
+  </span>
+</div>
+{% if предмет.notes %}<p class="подпись">{{ предмет.notes }}</p>{% endif %}
+
+<h2>Счётчики
+  <a class="добавить" href="{% url 'meter_new' %}?item={{ предмет.pk }}">+ добавить</a>
+</h2>
+{% for счётчик in счётчики_предмета %}
+  <div class="карточка строка" style="margin-bottom: 0.5rem;">
+    <a class="имя" href="{% url 'meter' счётчик.pk %}">{{ счётчик.name }}</a>
+    <span class="подпись">в {{ счётчик.unit }}</span>
+  </div>
+{% empty %}
+  <p class="пусто">Счётчиков нет — например, пробег в км.</p>
+{% endfor %}
+
+<h2>Дела
+  <a class="добавить" href="{% url 'obligation_new' %}?назад={{ назад|urlencode }}">+ добавить</a>
+</h2>
+{% for дело in дела_предмета %}
+  <div class="карточка строка" style="margin-bottom: 0.5rem;">
+    <a class="имя" href="{% url 'obligation' дело.pk %}">{{ дело.name }}</a>
+    <span class="подпись">{{ дело.get_rule_kind_display }}</span>
+  </div>
+{% empty %}
+  <p class="пусто">К этому предмету дел пока нет.</p>
+{% endfor %}
+
+{% include "core/_фактура.html" %}
+{% endblock %}

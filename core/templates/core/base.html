@@ -81,6 +81,13 @@
   .пункт.soon .счёт-широко { color: var(--жёлтый); }
   .пункт .всего { font-size: 0.75rem; color: #96948e; }
   .подпись-меню { display: none; }
+  .строка {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 0.6rem;
+  }
+  .строка .имя { color: inherit; text-decoration: none; }
+  .строка a.имя:hover { text-decoration: underline; }
+  h2 .добавить { font-weight: 400; margin-left: 0.4rem; }
 
   .карточка {
     background: var(--лист); border: 1px solid var(--рамка);
@@ -208,7 +215,7 @@
     <div>
       {% if user.is_authenticated %}
         {{ user.get_username }} ·
-        <a href="/admin/">справочники</a> ·
+        <a href="{% url 'catalog' %}">справочники</a> ·
         <form action="{% url 'logout' %}" method="post" style="display:inline">
           {% csrf_token %}<button class="ссылка" type="submit">выход</button>
         </form>

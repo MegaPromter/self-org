@@ -17,6 +17,7 @@ from django.db import transaction
 from .models import (
     Category,
     Completion,
+    Fact,
     Item,
     Meter,
     MeterReading,
@@ -279,3 +280,86 @@ class CompletionForm(forms.ModelForm):
             "date": forms.DateInput(attrs={"type": "date"}),
             "note": forms.Textarea(attrs={"rows": 2}),
         }
+
+
+class ItemForm(forms.ModelForm):
+    """Предмет: то, что обслуживают, — машина, котёл, квартира."""
+
+    class Meta:
+        model = Item
+        fields = ["name", "category", "notes"]
+        labels = {"name": "название", "category": "раздел", "notes": "заметки"}
+        widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["category"].required = False
+        self.fields["category"].empty_label = "— без раздела —"
+
+
+class PersonForm(forms.ModelForm):
+    """Человек: родня и знакомые — дни рождения, звонки, помощь."""
+
+    class Meta:
+        model = Person
+        fields = ["name", "birth_date", "notes"]
+        labels = {
+            "name": "имя",
+            "birth_date": "дата рождения",
+            "notes": "заметки",
+        }
+        widgets = {
+            "birth_date": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["birth_date"].required = False
+
+
+class MeterForm(forms.ModelForm):
+    """Счётчик предмета: пробег, вода, моточасы."""
+
+    class Meta:
+        model = Meter
+        fields = [
+            "item",
+            "name",
+            "unit",
+            "expected_yearly_usage",
+            "reading_reminder_days",
+        ]
+        labels = {
+            "item": "предмет",
+            "name": "название",
+            "unit": "в чём измеряется",
+        }
+
+
+class MeterReadingForm(forms.ModelForm):
+    """Показание счётчика: сколько и на какую дату."""
+
+    class Meta:
+        model = MeterReading
+        fields = ["value", "date"]
+        labels = {"value": "показание", "date": "на дату"}
+        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
+
+
+class CategoryForm(forms.ModelForm):
+    """Раздел: транспорт, дом, семья…"""
+
+    class Meta:
+        model = Category
+        fields = ["name", "order"]
+        labels = {"name": "название", "order": "порядок"}
+
+
+class FactForm(forms.ModelForm):
+    """Строка фактуры: где лежит, номер, цена, файл."""
+
+    class Meta:
+        model = Fact
+        fields = ["name", "value", "file"]
+        labels = {"name": "название", "value": "значение", "file": "файл"}

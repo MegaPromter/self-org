@@ -1,0 +1,70 @@
+{# Справочники: предметы, люди, счётчики, разделы. #}
+{% extends "core/base.html" %}
+{% block title %}Справочники — Self-org{% endblock %}
+
+{% block содержимое %}
+<div class="шапка-раздела">
+  <span class="название">Справочники</span>
+  <span class="подпись">то, к чему привязаны дела</span>
+</div>
+
+<h2>Предметы <a class="добавить" href="{% url 'item_new' %}">+ добавить</a></h2>
+{% for предмет in предметы %}
+  <div class="карточка строка">
+    <div>
+      <a class="имя" href="{% url 'item' предмет.pk %}">{{ предмет.name }}</a>
+      <p class="подпись">
+        {% if предмет.category %}{{ предмет.category }}{% else %}без раздела{% endif %}
+        {% for счётчик in предмет.meters.all %} · {{ счётчик.name }}{% endfor %}
+      </p>
+    </div>
+    <a class="подпись" href="{% url 'item_edit' предмет.pk %}">править</a>
+  </div>
+{% empty %}
+  <p class="пусто">Предметов пока нет — машина, квартира, котёл появятся здесь.</p>
+{% endfor %}
+
+<h2>Люди <a class="добавить" href="{% url 'person_new' %}">+ добавить</a></h2>
+{% for человек in люди %}
+  <div class="карточка строка">
+    <div>
+      <a class="имя" href="{% url 'person' человек.pk %}">{{ человек.name }}</a>
+      {% if человек.birth_date %}
+        <p class="подпись">день рождения {{ человек.birth_date|date:"j E" }}</p>
+      {% endif %}
+    </div>
+    <a class="подпись" href="{% url 'person_edit' человек.pk %}">править</a>
+  </div>
+{% empty %}
+  <p class="пусто">Людей пока нет — родня и знакомые появятся здесь.</p>
+{% endfor %}
+
+<h2>Счётчики <a class="добавить" href="{% url 'meter_new' %}">+ добавить</a></h2>
+{% for счётчик in счётчики_справочника %}
+  <div class="карточка строка">
+    <div>
+      <a class="имя" href="{% url 'meter' счётчик.pk %}">{{ счётчик.name }}</a>
+      <p class="подпись">{{ счётчик.item }} · в {{ счётчик.unit }}</p>
+    </div>
+    <a class="подпись" href="{% url 'meter_edit' счётчик.pk %}">править</a>
+  </div>
+{% empty %}
+  <p class="пусто">Счётчиков пока нет — пробег, вода, моточасы появятся здесь.</p>
+{% endfor %}
+
+<h2>Разделы <a class="добавить" href="{% url 'category_new' %}">+ добавить</a></h2>
+{% for раздел in разделы %}
+  <div class="карточка строка">
+    <div>
+      <span class="имя">{{ раздел.name }}</span>
+      <p class="подпись">порядок {{ раздел.order }}</p>
+    </div>
+    <a class="подпись" href="{% url 'category_edit' раздел.pk %}">править</a>
+  </div>
+{% endfor %}
+
+<p class="подпись" style="margin-top: 1.2rem;">
+  Сложные случаи — в <a href="/admin/">админке</a>: там же журнал
+  уведомлений и настройки Telegram.
+</p>
+{% endblock %}
