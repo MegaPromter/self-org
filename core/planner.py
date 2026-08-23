@@ -155,10 +155,13 @@ def _проверить_обязательства(now):
             .order_by("-created_at")
             .first()
         )
+        # «Не раньше начала цикла»: строгое «позже» пропускало дела,
+        # заведённые сегодня (начало цикла = сегодня), и они
+        # напоминали о себе каждым прогоном — по разу в четыре часа.
         в_цикле = (
             последнее is not None
             and статус.cycle_start is not None
-            and timezone.localdate(последнее.created_at) > статус.cycle_start
+            and timezone.localdate(последнее.created_at) >= статус.cycle_start
         )
         if вид in (Notification.Kind.SOON, Notification.Kind.TODAY):
             # Одно «скоро» и одно «сегодня» на цикл (правило 1).

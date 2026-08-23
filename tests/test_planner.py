@@ -229,3 +229,24 @@ def test_журнал_виден_в_админке(db):
     колонки = admin.site._registry[Notification].list_display
     for поле in ("user", "text", "status", "sent_at"):
         assert поле in колонки
+
+
+@pytest.mark.django_db
+def test_delo_zavedyonnoe_segodnya_napominaet_odin_raz(антон):
+    """Начало цикла — сегодня: второй прогон дубля не создаёт.
+
+    Дефект, найденный на обкатке: строгое сравнение «позже начала
+    цикла» пропускало дела, заведённые в тот же день, и они
+    напоминали каждым прогоном.
+    """
+    дело = Obligation.objects.create(
+        name="Забрать посылку",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.ONCE,
+        due_date=СЕГОДНЯ,
+        created=СЕГОДНЯ,
+        owner=антон,
+    )
+    planner.run(момент(час=10))
+    planner.run(момент(час=14))
+    assert Notification.objects.filter(obligation=дело).count() == 1
