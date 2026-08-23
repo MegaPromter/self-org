@@ -190,6 +190,9 @@ class Obligation(models.Model):
         ONCE = "once", "разово к дате"
         INTERVAL = "interval", "каждые N от последнего выполнения"
         ANNUAL = "annual", "ежегодно в фиксированную дату"
+        # «Когда получится»: срока нет, напоминаний нет, отметка
+        # закрывает дело (заметка «Правки по итогам обкатки»).
+        SOMEDAY = "someday", "когда получится — без срока"
 
     class IntervalUnit(models.TextChoices):
         DAYS = "days", "дней"
@@ -465,6 +468,7 @@ class Notification(models.Model):
 
     class Kind(models.TextChoices):
         SOON = "soon", "скоро срок"
+        TODAY = "today", "срок сегодня"
         OVERDUE = "overdue", "просрочено"
         READING = "reading", "введите показания"
 

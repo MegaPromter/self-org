@@ -18,8 +18,10 @@ class State(enum.Enum):
 
     OK = "в норме"
     SOON = "скоро"
+    TODAY = "сегодня"  # срок наступает ровно сегодня — ещё не просрочка
     OVERDUE = "просрочено"
     CLOSED = "закрыто"  # разовое с отмеченным выполнением
+    NO_DEADLINE = "без срока"  # «когда получится»: делаем без даты
     NO_DATA = "нет данных"  # не от чего отсчитывать срок
 
     def __str__(self):
@@ -183,10 +185,15 @@ def _time_part(obligation, last_completion, today):
             return State.CLOSED  # правило 10
         return obligation.created, obligation.due_date
 
+    if obligation.time_kind == вид.SOMEDAY:
+        # «Когда получится»: срока нет, отметка закрывает дело.
+        return State.CLOSED if last_completion else State.NO_DEADLINE
+
     if obligation.time_kind == вид.INTERVAL:
-        if last_completion is None:
-            return State.NO_DATA  # правило 7: гадать не будем
-        start = last_completion.date
+        # Отметок ещё нет — считаем от дня заведения (правило 7
+        # в редакции заметки «Правки по итогам обкатки»): дело
+        # с интервалом должно жить сразу, а не ждать первой отметки.
+        start = last_completion.date if last_completion else obligation.created
         return start, _add_interval(
             start, obligation.interval_value, obligation.interval_unit
         )
@@ -230,11 +237,14 @@ def compute_status(
     доли = []
     заметки = []
 
+    без_срока = False
     if нужно_время:
         часть = _time_part(obligation, last, today)
         if часть is State.CLOSED:
             return ObligationStatus(state=State.CLOSED)
-        if часть is State.NO_DATA:
+        if часть is State.NO_DEADLINE:
+            без_срока = True
+        elif часть is State.NO_DATA:
             заметки.append("отметьте, когда делалось в последний раз")
         else:
             start, due = часть
@@ -272,12 +282,27 @@ def compute_status(
 
     итог.message = "; ".join(dict.fromkeys(заметки))
     if not доли:
-        return итог  # ни одну часть посчитать не из чего
+        # Считать нечего: либо дело «когда получится», либо нет
+        # точки отсчёта.
+        итог.state = State.NO_DEADLINE if без_срока else State.NO_DATA
+        return итог
 
     # Правило 9: действует наибольшая доля — срок, наступающий раньше.
     итог.fraction = max(доли)
     порог = Decimal(obligation.soon_threshold_percent) / 100
-    if итог.fraction >= 1:
+    # День срока — ещё не просрочка: «сегодня» отдельным состоянием
+    # (заметка «Правки по итогам обкатки», правило 1).
+    черта_позади = (итог.days_left is not None and итог.days_left < 0) or (
+        итог.meter_left is not None and итог.meter_left < 0
+    )
+    ровно_сегодня = not черта_позади and (
+        итог.days_left == 0 or итог.meter_left == 0
+    )
+    if черта_позади:
+        итог.state = State.OVERDUE
+    elif ровно_сегодня:
+        итог.state = State.TODAY
+    elif итог.fraction >= 1:
         итог.state = State.OVERDUE
     elif итог.fraction >= порог:
         итог.state = State.SOON

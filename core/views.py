@@ -60,7 +60,10 @@ from .status import (
 # чтобы видеть, что надвигается (правило 3 заметки «Разделы»).
 БЛИЖАЙШИХ_НА_ГЛАВНОЙ = 3
 
-ГРУППА_ОБЫЧНЫЕ, ГРУППА_ОТЛОЖЕННЫЕ, ГРУППА_БЕЗ_ДАННЫХ = 0, 1, 2
+ГРУППА_ОБЫЧНЫЕ = 0
+ГРУППА_ОТЛОЖЕННЫЕ = 1
+ГРУППА_БЕЗ_СРОКА = 2  # «когда получится» — живёт внизу списка
+ГРУППА_БЕЗ_ДАННЫХ = 3
 
 
 @dataclass
@@ -82,7 +85,11 @@ class Дело:
 
     @property
     def скоро(self):
-        return self.status.state is State.SOON and not self.отложено_до
+        """«Скоро» и «сегодня» — то, что горит, но ещё не просрочено."""
+        return (
+            self.status.state in (State.SOON, State.TODAY)
+            and not self.отложено_до
+        )
 
     @property
     def метка(self):
@@ -98,6 +105,7 @@ class Дело:
             return "snoozed"
         return {
             State.OVERDUE: "overdue",
+            State.TODAY: "today",
             State.SOON: "soon",
             State.OK: "ok",
         }.get(self.status.state, "nodata")
@@ -222,10 +230,12 @@ def _осталось(статус):
             if статус.meter_left >= 0
             else f"просрочено на {префикс}{значение}"
         )
-    if статус.days_left is not None:
+    if статус.days_left == 0:
+        части.append("срок сегодня")
+    elif статус.days_left is not None:
         части.append(
             f"осталось {статус.days_left} дн."
-            if статус.days_left >= 0
+            if статус.days_left > 0
             else f"просрочено на {-статус.days_left} дн."
         )
     return части
@@ -265,6 +275,8 @@ def _дела(user, today):
         )
         if статус.state is State.NO_DATA:
             группа = ГРУППА_БЕЗ_ДАННЫХ
+        elif статус.state is State.NO_DEADLINE:
+            группа = ГРУППА_БЕЗ_СРОКА
         elif отложено:
             группа = ГРУППА_ОТЛОЖЕННЫЕ
         else:

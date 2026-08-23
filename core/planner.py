@@ -139,14 +139,14 @@ def _проверить_обязательства(now):
         ):
             continue
         статус = compute_status(обязательство, today)
-        if статус.state not in (State.SOON, State.OVERDUE):
-            continue
+        if статус.state not in (State.SOON, State.TODAY, State.OVERDUE):
+            continue  # «без срока» и «нет данных» не напоминают
         получатель = _получатель(обязательство)
-        вид = (
-            Notification.Kind.SOON
-            if статус.state is State.SOON
-            else Notification.Kind.OVERDUE
-        )
+        вид = {
+            State.SOON: Notification.Kind.SOON,
+            State.TODAY: Notification.Kind.TODAY,
+            State.OVERDUE: Notification.Kind.OVERDUE,
+        }[статус.state]
         # Устаревшие в расчёт не идут: их никто не увидел, значит
         # напомнить надо заново.
         последнее = (
@@ -160,8 +160,9 @@ def _проверить_обязательства(now):
             and статус.cycle_start is not None
             and timezone.localdate(последнее.created_at) > статус.cycle_start
         )
-        if вид == Notification.Kind.SOON:
-            if в_цикле:  # одно «скоро» на цикл (правило 1)
+        if вид in (Notification.Kind.SOON, Notification.Kind.TODAY):
+            # Одно «скоро» и одно «сегодня» на цикл (правило 1).
+            if в_цикле:
                 continue
         else:  # повтор о просроченном не чаще заданного (правило 2)
             if (
@@ -224,13 +225,15 @@ def _проверить_счётчики(now):
 
 def _текст(обязательство, статус):
     """Текст напоминания; по оценке — просьба сверить (правило 4)."""
-    скоро = статус.state is State.SOON
+    скоро = статус.state in (State.SOON, State.TODAY)
     if статус.is_estimate and обязательство.meter:
         голова = (
             f"{обязательство.name}: по расчёту "
             + ("подходит срок" if скоро else "срок прошёл")
             + f" — проверьте {обязательство.meter.name.lower()}"
         )
+    elif статус.state is State.TODAY:
+        голова = обязательство.name + ": срок сегодня"
     else:
         голова = обязательство.name + (
             ": скоро срок" if скоро else ": срок прошёл"
@@ -245,10 +248,12 @@ def _текст(обязательство, статус):
             if статус.meter_left >= 0
             else f"просрочено на {значение}"
         )
-    if статус.days_left is not None:
+    if статус.days_left is not None and статус.days_left != 0:
+        # Ноль дней не пишем: «срок сегодня (осталось 0 дн.)» —
+        # это одно и то же дважды.
         части.append(
             f"осталось {статус.days_left} дн."
-            if статус.days_left >= 0
+            if статус.days_left > 0
             else f"просрочено на {-статус.days_left} дн."
         )
     return голова + (f" ({'; '.join(части)})" if части else "")

@@ -171,20 +171,26 @@ def test_udalenie_dela_ne_trogaet_predmet_i_schetchik(вошедший, хозя
 
 @pytest.mark.django_db
 def test_otmetka_zadnim_chislom_i_udalenie_otmetki(вошедший, хозяин):
+    предмет = Item.objects.create(name="Квартира")
+    счётчик = Meter.objects.create(item=предмет, name="Вода", unit="м³")
     дело = Obligation.objects.create(
         name="Промывка котла",
-        rule_kind=Obligation.RuleKind.TIME,
-        time_kind=Obligation.TimeKind.INTERVAL,
-        interval_value=12,
-        interval_unit=Obligation.IntervalUnit.MONTHS,
+        item=предмет,
+        rule_kind=Obligation.RuleKind.METER,
+        meter=счётчик,
+        meter_interval=Decimal("50"),
         owner=хозяин,
     )
     assert compute_status(дело, СЕГОДНЯ).state is State.NO_DATA
 
+    MeterReading.objects.create(
+        meter=счётчик, value=Decimal("100"), date=дней_назад(50)
+    )
     вошедший.post(
         f"/obligation/{дело.pk}/completion/",
         {
             "в-date": дней_назад(40).isoformat(),
+            "в-meter_value": "110",
             "в-cost": "3500",
             "в-note": "делал сам",
         },

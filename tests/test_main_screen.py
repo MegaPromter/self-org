@@ -112,13 +112,20 @@ def дела(хозяин, машина):
     )
     Completion.objects.create(obligation=фильтр, date=дней_назад(60))
 
+    # «Нет данных» остаётся у правил по счётчику без отметок:
+    # от какого показания считать — система не знает.
+    вода = Meter.objects.create(item=квартира, name="Вода", unit="м³")
+    # Свежий ввод: иначе «пора ввести» появится и у воды, а проверки
+    # ниже говорят про пробег.
+    MeterReading.objects.create(
+        meter=вода, value=Decimal("100"), date=СЕГОДНЯ
+    )
     котёл = Obligation.objects.create(
         name="Промывка котла",
         item=квартира,
-        rule_kind=Obligation.RuleKind.TIME,
-        time_kind=Obligation.TimeKind.INTERVAL,
-        interval_value=12,
-        interval_unit=Obligation.IntervalUnit.MONTHS,
+        rule_kind=Obligation.RuleKind.METER,
+        meter=вода,
+        meter_interval=Decimal("50"),
         owner=хозяин,
     )
     return жидкость, сестра, фильтр, котёл

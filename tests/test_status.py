@@ -11,7 +11,13 @@ from django.contrib import admin
 from django.contrib.auth.models import User
 
 from core.models import Completion, Item, Meter, MeterReading, Obligation
-from core.status import State, compute_status, estimate_meter, needs_reading
+from core.status import (
+    State,
+    _add_months,
+    compute_status,
+    estimate_meter,
+    needs_reading,
+)
 
 # Дата настоящая, а не выдуманная: колонки админки считают
 # состояние от сегодняшнего дня и с фиксированной датой разошлись
@@ -116,7 +122,9 @@ def test_razovoe_prosrocheno_i_zakryto(антон):
     assert compute_status(страховка, СЕГОДНЯ).state is State.CLOSED
 
 
-def test_interval_bez_vypolneniya_net_dannyh(антон):
+def test_interval_bez_vypolneniya_schitaetsya_ot_zavedeniya(антон):
+    """Правило 7 в редакции «Правок по итогам обкатки»: интервальное
+    дело живёт сразу, отсчёт идёт от дня заведения."""
     фильтр = Obligation.objects.create(
         name="Фильтр воды",
         rule_kind=Obligation.RuleKind.TIME,
@@ -124,10 +132,44 @@ def test_interval_bez_vypolneniya_net_dannyh(антон):
         interval_value=6,
         interval_unit=Obligation.IntervalUnit.MONTHS,
         owner=антон,
+        created=СЕГОДНЯ,
     )
     статус = compute_status(фильтр, СЕГОДНЯ)
-    assert статус.state is State.NO_DATA
-    assert "отметьте" in статус.message
+    assert статус.state is State.OK
+    assert статус.due_date == _add_months(СЕГОДНЯ, 6)
+    assert статус.message == ""
+
+
+def test_delo_bez_sroka_zhdyot_svoego_chasa(антон):
+    """«Когда получится»: состояние «без срока», отметка закрывает."""
+    полки = Obligation.objects.create(
+        name="Повесить полки",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.SOMEDAY,
+        owner=антон,
+    )
+    assert compute_status(полки, СЕГОДНЯ).state is State.NO_DEADLINE
+
+    Completion.objects.create(obligation=полки, date=СЕГОДНЯ)
+    assert compute_status(полки, СЕГОДНЯ).state is State.CLOSED
+
+
+def test_srok_segodnya_eshchyo_ne_prosrochka(антон):
+    """День срока — состояние «сегодня», просрочка со следующего дня."""
+    страховка = Obligation.objects.create(
+        name="Оплатить страховку",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.ONCE,
+        due_date=СЕГОДНЯ,
+        created=дней_назад(30),
+        owner=антон,
+    )
+    сегодня = compute_status(страховка, СЕГОДНЯ)
+    assert сегодня.state is State.TODAY
+    assert сегодня.days_left == 0
+
+    завтра = compute_status(страховка, СЕГОДНЯ + datetime.timedelta(days=1))
+    assert завтра.state is State.OVERDUE
 
 
 def test_pora_vvesti_pokazaniya(пробег):
