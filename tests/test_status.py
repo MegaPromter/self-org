@@ -210,3 +210,63 @@ def test_kolonki_adminki(масло):
     осталось = админка.left(масло)
     assert "400 км" in осталось
     assert "дн." in осталось
+
+
+# --- «Начало напоминаний»: день первого срока -------------------------------
+
+
+@pytest.fixture
+def ящики(антон):
+    """«Ящики для хранения еды»: каждые 3 дня, первый раз через 8 дней."""
+    return Obligation.objects.create(
+        name="Ящики для хранения еды",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.INTERVAL,
+        interval_value=3,
+        interval_unit=Obligation.IntervalUnit.DAYS,
+        created=СЕГОДНЯ,
+        start_date=СЕГОДНЯ + datetime.timedelta(days=8),
+        owner=антон,
+    )
+
+
+@pytest.mark.django_db
+def test_pervyy_srok_do_daty_molchit(ящики):
+    """Правило 6: пока дата не подошла — «в норме», срок виден."""
+    статус = compute_status(ящики, СЕГОДНЯ + datetime.timedelta(days=1))
+    assert статус.state is State.OK
+    assert статус.due_date == ящики.start_date
+    assert статус.days_left == 7
+
+
+@pytest.mark.django_db
+def test_pervyy_srok_nastupaet_v_svoy_den(ящики):
+    """Правило 1: напоминает ровно в указанный день, не через интервал."""
+    статус = compute_status(ящики, ящики.start_date)
+    assert статус.state is State.TODAY
+    assert статус.days_left == 0
+
+
+@pytest.mark.django_db
+def test_posle_otmetki_schitaem_ot_otmetki(ящики):
+    """Правило 3: отметка «сделано» главнее «первого раза»."""
+    Completion.objects.create(obligation=ящики, date=ящики.start_date)
+    статус = compute_status(ящики, ящики.start_date)
+    assert статус.due_date == ящики.start_date + datetime.timedelta(days=3)
+    assert статус.state is State.OK
+
+
+@pytest.mark.django_db
+def test_bez_pervogo_sroka_vsyo_kak_ranshe(антон):
+    """Правило 2: поле пустое — отсчёт от дня заведения, как было."""
+    дело = Obligation.objects.create(
+        name="Полить цветы",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.INTERVAL,
+        interval_value=3,
+        interval_unit=Obligation.IntervalUnit.DAYS,
+        created=СЕГОДНЯ,
+        owner=антон,
+    )
+    статус = compute_status(дело, СЕГОДНЯ)
+    assert статус.due_date == СЕГОДНЯ + datetime.timedelta(days=3)

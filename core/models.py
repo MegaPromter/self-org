@@ -264,6 +264,15 @@ class Obligation(models.Model):
         blank=True,
     )
     due_date = models.DateField("дата (для разового)", null=True, blank=True)
+    # «Когда напомнить первый раз» у интервального дела: день
+    # первого срока, дальше отсчёт как обычно. Пусто — считаем
+    # от дня заведения (заметка «Начало напоминаний», правила 1–2).
+    start_date = models.DateField(
+        "первый срок",
+        null=True,
+        blank=True,
+        help_text="День первого напоминания. Пусто — от дня заведения.",
+    )
     interval_value = models.PositiveIntegerField(
         "интервал: сколько", null=True, blank=True
     )

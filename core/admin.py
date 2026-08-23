@@ -106,6 +106,7 @@ class ObligationAdmin(admin.ModelAdmin):
                     "time_kind",
                     "due_date",
                     ("interval_value", "interval_unit"),
+                    "start_date",
                     ("annual_month", "annual_day"),
                     ("meter", "meter_interval"),
                 ],

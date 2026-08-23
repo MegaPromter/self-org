@@ -26,6 +26,10 @@
       {% include "core/_поле.html" with поле=форма.interval_value %}
       {% include "core/_поле.html" with поле=форма.interval_unit %}
     </div>
+    {# «Первый раз» — только у «каждые N», прячется вместе с ним. #}
+    <div data-часть="интервал">
+      {% include "core/_поле.html" with поле=форма.start_date %}
+    </div>
     <div data-часть="ежегодно">
       {% include "core/_поле.html" with поле=форма.годовщина %}
     </div>

@@ -250,3 +250,26 @@ def test_delo_zavedyonnoe_segodnya_napominaet_odin_raz(антон):
     planner.run(момент(час=10))
     planner.run(момент(час=14))
     assert Notification.objects.filter(obligation=дело).count() == 1
+
+
+def test_pervyy_srok_do_daty_ne_napominaet(антон, канал):
+    """«Начало напоминаний», правило 6: до первого срока Telegram молчит.
+
+    Дело каждые 3 дня с первым сроком через 8 дней: сегодня о нём
+    ни строчки, а в свой день — ровно одно напоминание.
+    """
+    дело = Obligation.objects.create(
+        name="Ящики для хранения еды",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.INTERVAL,
+        interval_value=3,
+        interval_unit=Obligation.IntervalUnit.DAYS,
+        created=СЕГОДНЯ,
+        start_date=СЕГОДНЯ + datetime.timedelta(days=8),
+        owner=антон,
+    )
+    planner.run(момент())
+    assert Notification.objects.filter(obligation=дело).count() == 0
+
+    planner.run(момент(день=дело.start_date))
+    assert Notification.objects.filter(obligation=дело).count() == 1

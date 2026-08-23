@@ -190,9 +190,24 @@ def _time_part(obligation, last_completion, today):
         return State.CLOSED if last_completion else State.NO_DEADLINE
 
     if obligation.time_kind == вид.INTERVAL:
+        if last_completion is None and obligation.start_date:
+            # «Первый раз такого-то числа» (заметка «Начало
+            # напоминаний», правило 1): указанная дата и есть первый
+            # срок, поэтому цикл начинается на интервал раньше —
+            # тогда «скоро» загорается перед ней, а не после.
+            return (
+                _add_interval(
+                    obligation.start_date,
+                    -obligation.interval_value,
+                    obligation.interval_unit,
+                ),
+                obligation.start_date,
+            )
         # Отметок ещё нет — считаем от дня заведения (правило 7
         # в редакции заметки «Правки по итогам обкатки»): дело
         # с интервалом должно жить сразу, а не ждать первой отметки.
+        # Отметка появилась — «первый срок» больше не при чём
+        # (правило 3 заметки «Начало напоминаний»).
         start = last_completion.date if last_completion else obligation.created
         return start, _add_interval(
             start, obligation.interval_value, obligation.interval_unit

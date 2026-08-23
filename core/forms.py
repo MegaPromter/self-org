@@ -126,6 +126,7 @@ class ObligationForm(forms.ModelForm):
             "due_date",
             "interval_value",
             "interval_unit",
+            "start_date",
             "meter",
             "meter_interval",
             "notes",
@@ -142,12 +143,14 @@ class ObligationForm(forms.ModelForm):
             "due_date": "дата",
             "interval_value": "каждые",
             "interval_unit": "чего",
+            "start_date": "когда напомнить первый раз",
             "meter": "счётчик",
             "meter_interval": "каждые (по счётчику)",
             "notes": "заметка",
         }
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
+            "start_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -157,6 +160,9 @@ class ObligationForm(forms.ModelForm):
         for имя in ("item", "person", "category", "meter", "assignee"):
             self.fields[имя].required = False
             self.fields[имя].empty_label = "— не выбрано —"
+        self.fields["start_date"].help_text = (
+            "Необязательно. Пусто — отсчёт пойдёт от сегодняшнего дня."
+        )
         self.fields["category"].queryset = Category.objects.all()
         self.fields["item"].queryset = Item.objects.all()
         self.fields["meter"].queryset = Meter.objects.select_related("item")
@@ -257,6 +263,19 @@ class ObligationForm(forms.ModelForm):
             Obligation.RuleKind.METER,
             Obligation.RuleKind.BOTH,
         )
+
+        # «Первый раз» осмыслен только у «каждые N»: у остальных
+        # способов дата либо уже есть, либо не нужна (правило 7).
+        # Поле там спрятано, так что молча очищаем, а не ругаемся.
+        if по_времени != Obligation.TimeKind.INTERVAL:
+            данные["start_date"] = None
+        elif данные.get("start_date") and данные.get("последний_раз"):
+            # Правило 4: две точки отсчёта разом — противоречие.
+            self.add_error(
+                "start_date",
+                "Выберите что-то одно: либо когда делали последний раз, "
+                "либо когда напомнить первый раз.",
+            )
 
         if нужно_время and по_времени == Obligation.TimeKind.ANNUAL:
             if not данные.get("годовщина"):

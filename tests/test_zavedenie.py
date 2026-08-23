@@ -314,3 +314,79 @@ def test_na_forme_net_menyu_i_svodki(вошедший):
     текст = вошедший.get("/new/").content.decode()
     assert "ближайший срок" not in текст
     assert "Самое срочное" not in текст
+
+
+# --- «Начало напоминаний»: поле «когда напомнить первый раз» ----------------
+
+
+def через_дней(n):
+    return СЕГОДНЯ + datetime.timedelta(days=n)
+
+
+@pytest.mark.django_db
+def test_pervoe_napominanie_zadayot_srok_bez_otmetki(вошедший):
+    """Дата в форме становится первым сроком, выполнения не заводится."""
+    ответ = вошедший.post(
+        "/new/",
+        {
+            "name": "Ящики для хранения еды",
+            "способ": "повторяется",
+            "повтор_вид": "интервал",
+            "interval_value": "3",
+            "interval_unit": "days",
+            "start_date": через_дней(8).isoformat(),
+            "soon_threshold_percent": "70",
+            "overdue_repeat_days": "7",
+        },
+    )
+    assert ответ.status_code == 302
+
+    дело = Obligation.objects.get(name="Ящики для хранения еды")
+    assert дело.start_date == через_дней(8)
+    assert дело.completions.count() == 0  # отметки о выдуманном деле нет
+
+    статус = compute_status(дело, СЕГОДНЯ)
+    assert статус.due_date == через_дней(8)
+    assert статус.state is State.OK
+
+
+@pytest.mark.django_db
+def test_dve_tochki_otschyota_srazu_ne_prinimayutsya(вошедший):
+    """Правило 4: «первый раз» и «последний раз» вместе — ошибка."""
+    ответ = вошедший.post(
+        "/new/",
+        {
+            "name": "Ящики для хранения еды",
+            "способ": "повторяется",
+            "повтор_вид": "интервал",
+            "interval_value": "3",
+            "interval_unit": "days",
+            "start_date": через_дней(8).isoformat(),
+            "последний_раз": дней_назад(2).isoformat(),
+            "soon_threshold_percent": "70",
+            "overdue_repeat_days": "7",
+        },
+    )
+    assert ответ.status_code == 200  # форма вернулась с ошибкой
+    assert "одно" in ответ.content.decode()
+    assert not Obligation.objects.filter(
+        name="Ящики для хранения еды"
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_u_razovogo_dela_pervyy_srok_ne_zapisyvaetsya(вошедший):
+    """Правило 7: у «один раз к дате» поле спрятано и не сохраняется."""
+    вошедший.post(
+        "/new/",
+        {
+            "name": "Забрать посылку",
+            "способ": "дата",
+            "due_date": через_дней(3).isoformat(),
+            "start_date": через_дней(8).isoformat(),
+            "soon_threshold_percent": "70",
+            "overdue_repeat_days": "7",
+        },
+    )
+    дело = Obligation.objects.get(name="Забрать посылку")
+    assert дело.start_date is None
