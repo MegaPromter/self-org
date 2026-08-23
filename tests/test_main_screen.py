@@ -147,9 +147,14 @@ def test_plitki_pokazyvayut_vse_razdely_i_schet(вошедший, дела):
     # Все семь разделов справочника, включая пустые.
     for раздел in Category.objects.all():
         assert раздел.name in текст
-    assert "1 просрочено" in текст  # Тормозная жидкость
-    assert "всего 2" in текст  # Дом: фильтр и котёл
-    assert "дел нет" in текст  # Хозяйство и другие пустые
+    транспорт = Category.objects.get(name="Транспорт")
+    # Счёт в меню — «горит · всего»: у транспорта одно дело, и оно
+    # просрочено; у дома два спокойных — просто «2».
+    assert f'/section/{транспорт.pk}/">' in текст
+    assert "1 · 1" in текст
+    # Пустые разделы собраны в свою группу и места почти не занимают
+    # (правила 3 и 4 заметки «Порядок на экранах»).
+    assert "пока пусто" in текст
 
 
 @pytest.mark.django_db
@@ -235,7 +240,9 @@ def test_polnyy_spisok_pokazyvaet_vsyo_po_srochnosti(вошедший, дела)
         "Промывка котла",
     )
     assert места == sorted(места)
-    assert "просрочено" in текст and "скоро" in текст and "в норме" in текст
+    # Срок словами вместо пилюли состояния (правило 5 заметки
+    # «Порядок на экранах»).
+    assert "просрочено на" in текст and "через" in текст
     assert "width: 100%" in текст  # полоска пройденной доли интервала
     assert "Счётчики" in текст
 
@@ -274,8 +281,9 @@ def test_menyu_est_na_kazhdoy_stranice_i_podsvechivaet_razdel(вошедший, 
     для_раздела = вошедший.get(f"/section/{транспорт.pk}/").content.decode()
     assert "Самое срочное" in для_раздела  # меню на месте
     assert "Все дела" in для_раздела
-    # Текущий раздел отмечен: класс «активен» стоит у его ссылки.
-    начало = для_раздела.index(f'/section/{транспорт.pk}/')
+    # Текущий раздел отмечен: класс «активен» стоит у его ссылки
+    # в меню (а не у ссылки «+ дело» с адресом возврата).
+    начало = для_раздела.index(f'href="/section/{транспорт.pk}/"')
     кусок = для_раздела[начало - 120 : начало]
     assert "активен" in кусок
 
@@ -415,3 +423,79 @@ def test_zakrytoe_razovoe_ne_pokazyvaetsya(вошедший, хозяин):
 def test_pustaya_baza_obyasnyaet_chto_delat(вошедший):
     текст = вошедший.get("/").content.decode()
     assert "Дел пока нет" in текст
+
+
+# --- Заметка «Порядок на экранах» -------------------------------------------
+
+
+@pytest.mark.django_db
+def test_kartochka_spiska_pokazyvaet_srok_i_pravilo_povtora(вошедший, дела):
+    """Правило 5 и 3: справа — когда, под названием — как часто."""
+    текст = вошедший.get("/all/").content.decode()
+    # Фильтр воды: интервал 12 месяцев, отметка 60 дней назад.
+    начало = текст.index("Фильтр воды на кухне")
+    карточка = текст[начало : начало + 400]
+    assert "через" in карточка
+    assert "каждые 12 месяцев" in карточка
+    # Ежегодное дело сестры называет свой день.
+    начало = текст.index("Поздравить сестру")
+    assert "раз в год" in текст[начало : начало + 400]
+
+
+@pytest.mark.django_db
+def test_otlozhit_svyornuto_pod_odnu_knopku(вошедший, дела):
+    """Правило 7: сроки откладывания раскрываются нажатием."""
+    текст = вошедший.get("/all/").content.decode()
+    assert '<details class="отложить">' in текст
+    assert "<summary>отложить</summary>" in текст
+    # Сами сроки на месте — просто спрятаны под кнопку.
+    assert "1 дн" in текст and "3 дн" in текст and "7 дн" in текст
+
+
+@pytest.mark.django_db
+def test_kartochka_dela_pokazyvaet_sut_i_rashody(вошедший, хозяин):
+    """Правила 8 и 9: сверху суть, среди фактов — расходы."""
+    квартира = Item.objects.create(
+        name="Квартира", category=Category.objects.get(name="Дом")
+    )
+    дело = Obligation.objects.create(
+        name="Промывка котла",
+        item=квартира,
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.INTERVAL,
+        interval_value=6,
+        interval_unit=Obligation.IntervalUnit.MONTHS,
+        owner=хозяин,
+    )
+    for дней, цена in ((400, "6500"), (200, "6000"), (30, "6000")):
+        Completion.objects.create(
+            obligation=дело, date=дней_назад(дней), cost=Decimal(цена)
+        )
+
+    текст = вошедший.get(f"/obligation/{дело.pk}/").content.decode()
+    assert f"18{ПРОБЕЛ}500 ₽ за 3 раза" in текст
+    assert "каждые 6 месяцев" in текст
+    assert "Квартира · Дом" in текст  # к чему относится
+    assert "Сделано сегодня" in текст
+    # Суть идёт выше форм: расходы встречаются раньше фактуры.
+    assert текст.index("потрачено") < текст.index("Фактура")
+
+
+@pytest.mark.django_db
+def test_delo_bez_cen_govorit_chto_ne_zapisano(вошедший, дела):
+    текст = вошедший.get(f"/obligation/{дела[2].pk}/").content.decode()
+    assert "не записано" in текст
+
+
+@pytest.mark.django_db
+def test_knopka_novogo_dela_odna_i_znaet_razdel(вошедший, дела):
+    """Кнопка «+ дело» на странице одна — в сводке, и она умная."""
+    for адрес in ("/", "/all/"):
+        assert вошедший.get(адрес).content.decode().count("+ дело") == 1
+
+    транспорт = Category.objects.get(name="Транспорт")
+    текст = вошедший.get(f"/section/{транспорт.pk}/").content.decode()
+    assert текст.count("+ дело") == 1
+    # На странице раздела кнопка подставляет этот раздел
+    # (в адресе имена параметров закодированы — раскрываем).
+    assert f"раздел={транспорт.pk}" in unquote(текст)

@@ -17,3 +17,6 @@ media/
 # установки пакета — создаются сами, в git не идут
 celerybeat-schedule*
 *.egg-info/
+
+# Снимки экранов для просмотра вида — служебное, в git не идут
+core/static/snap/

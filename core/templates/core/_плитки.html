@@ -1,0 +1,14 @@
+{# Выбор одной плиткой: крупные кнопки вместо выпадающего списка. #}
+<div class="поле плитки {% if мелко %}мелкие{% endif %}
+            {% if поле.errors %}сошибкой{% endif %}">
+  <p class="подпись">{{ поле.label }}</p>
+  <div class="ряд">
+    {% for вариант in поле %}
+      <label class="плитка">
+        {{ вариант.tag }}<span>{{ вариант.choice_label }}</span>
+      </label>
+    {% endfor %}
+  </div>
+  {% if поле.help_text %}<p class="фактура">{{ поле.help_text }}</p>{% endif %}
+  {% for ошибка in поле.errors %}<p class="ошибка">{{ ошибка }}</p>{% endfor %}
+</div>

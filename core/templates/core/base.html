@@ -43,44 +43,54 @@
   }
   .оболочка.одна-колонка { grid-template-areas: "содержимое"; }
 
-  .сводка { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
-  .ячейка {
-    background: var(--лист); border: 1px solid var(--рамка);
-    border-radius: 12px; padding: 0.5rem 0.7rem;
+  /* Сводка — одна строка: числа не должны съедать первый экран
+     (правило 1 заметки «Порядок на экранах»). */
+  .сводка {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 0.3rem 0.9rem; font-size: 0.85rem; color: var(--серый);
   }
-  .ячейка .подпись-числа {
-    font-size: 0.78rem; color: var(--серый); margin: 0;
+  .сводка .число b {
+    font-size: 1.05rem; font-weight: 600; color: var(--текст);
+    margin-right: 0.15rem;
   }
-  .ячейка .число { font-size: 1.5rem; font-weight: 600; margin: 0; }
-  .ячейка .дата { font-size: 1rem; font-weight: 600; margin: 0.2rem 0 0; }
-  .ячейка.overdue { background: #fbeae8; border-color: #e6b0aa; }
-  .ячейка.overdue .число, .ячейка.overdue .подпись-числа { color: var(--красный); }
-  .ячейка.soon { background: #fdf3e2; border-color: #f0d4a3; }
-  .ячейка.soon .число, .ячейка.soon .подпись-числа { color: var(--жёлтый); }
+  .сводка .число.overdue, .сводка .число.overdue b { color: var(--красный); }
+  .сводка .число.soon, .сводка .число.soon b { color: var(--жёлтый); }
+  .сводка .тихо { color: #96948e; }
+  .сводка .добавить {
+    margin-left: auto; text-decoration: none; white-space: nowrap;
+  }
 
-  /* Меню: на телефоне — плитки в сетку. */
+  /* Меню: на телефоне — лента с прокруткой пальцем вбок
+     (вариант «А», правило 3 заметки). */
   .меню {
-    display: grid; gap: 0.4rem;
-    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    display: flex; gap: 0.35rem; align-items: center;
+    overflow-x: auto; padding-bottom: 0.2rem;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
+  .меню::-webkit-scrollbar { display: none; }
   .пункт {
-    display: flex; flex-direction: column; gap: 0.1rem;
+    display: flex; align-items: baseline; gap: 0.35rem;
     background: var(--лист); border: 1px solid var(--рамка);
-    border-radius: 12px; padding: 0.5rem 0.7rem;
-    text-decoration: none; color: var(--текст);
+    border-radius: 999px; padding: 0.3rem 0.75rem;
+    text-decoration: none; color: var(--текст); white-space: nowrap;
   }
   .пункт:hover { border-color: #bfbdb5; }
-  .пункт.активен { border-color: var(--текст); }
+  .пункт.активен {
+    background: var(--текст); color: #fff; border-color: var(--текст);
+  }
+  .пункт.активен .счёт { color: #d9d7d1; }
   .пункт.overdue { border-color: #e6b0aa; }
   .пункт.today { border-color: #e8bf8a; }
   .пункт.soon { border-color: #f0d4a3; }
-  .пункт.empty { opacity: 0.55; }
-  .пункт .имя { font-weight: 600; font-size: 0.92rem; }
-  .пункт .счёт-широко { font-size: 0.78rem; color: var(--серый); }
-  .пункт .счёт-узко { display: none; }
-  .пункт.overdue .счёт-широко { color: var(--красный); }
-  .пункт.soon .счёт-широко { color: var(--жёлтый); }
-  .пункт .всего { font-size: 0.75rem; color: #96948e; }
+  .пункт .имя { font-weight: 500; font-size: 0.88rem; }
+  .пункт .счёт { font-size: 0.8rem; color: var(--серый); }
+  .пункт.overdue .счёт { color: var(--красный); }
+  .пункт.soon .счёт { color: var(--жёлтый); }
+  /* Пустые разделы: в ленте — те же пилюли, только серые.
+     На телефоне обёртка растворяется, чтобы каждая пилюля
+     встала в ленту сама по себе. */
+  .пустые { display: contents; }
+  .пункт.пусто { color: var(--серый); opacity: 0.75; }
   .подпись-меню { display: none; }
   .строка {
     display: flex; align-items: baseline; justify-content: space-between;
@@ -94,10 +104,26 @@
     background: var(--лист); border: 1px solid var(--рамка);
     border-radius: 12px; padding: 0.7rem 0.85rem;
   }
-  .карточка.overdue { border-color: #e6b0aa; }
-  .карточка.today { border-color: #e8bf8a; }
-  .карточка.soon { border-color: #f0d4a3; }
-  .список { display: grid; gap: 0.7rem; align-items: start; }
+  /* Оттенок карточки — по разделу: «Транспорт» и «Дом» видно
+     не читая. Тона приглушённые, чтобы список не пестрил. */
+  .карточка.тон1 { background: #f1f4f7; border-color: #d6dfe8; }
+  .карточка.тон2 { background: #f4f7f2; border-color: #dde5d8; }
+  .карточка.тон3 { background: #f8f6ef; border-color: #e6dfcc; }
+  .карточка.тон4 { background: #f9f3f1; border-color: #ead9d3; }
+  .карточка.тон5 { background: #f4f2f8; border-color: #dfdae8; }
+  .карточка.тон6 { background: #eff6f5; border-color: #d3e4e1; }
+  .карточка.тон7 { background: #f7f4f1; border-color: #e4dcd4; }
+  .карточка.тон8 { background: #f2f5f6; border-color: #d9e2e4; }
+  /* Состояние идёт после раздела и перебивает его рамку: что горит,
+     важнее того, к какому разделу оно относится. */
+  .карточка.overdue { border-color: var(--красный); }
+  .карточка.today { border-color: #d2691e; }
+  .карточка.soon { border-color: #d9a441; }
+  /* Карточки в ряду одной высоты: кнопки выстраиваются по общей
+     линии, а не пляшут вслед за длиной подписи. */
+  .список { display: grid; gap: 0.7rem; align-items: stretch; }
+  .список > .карточка { display: flex; flex-direction: column; }
+  .список > .карточка .кнопки { margin-top: auto; }
   .заголовок { display: flex; justify-content: space-between; gap: 0.5rem; }
   .имя { font-weight: 600; }
   .подпись { color: var(--серый); font-size: 0.85rem; margin: 0.1rem 0 0; }
@@ -111,11 +137,21 @@
   .метка.soon { background: #fdf3e2; color: var(--жёлтый); }
   .метка.ok { background: #e8f5ee; color: var(--зелёный); }
   .метка.snoozed, .метка.nodata { background: #eeece7; color: var(--серый); }
+  /* Срок словами вместо пилюли состояния: цвет говорит «как дела»,
+     текст — «когда» (правило 5 заметки «Порядок на экранах»). */
+  .срок {
+    font-size: 0.82rem; white-space: nowrap; align-self: center;
+    color: var(--серый);
+  }
+  .срок.overdue { color: var(--красный); font-weight: 600; }
+  .срок.today { color: #a9560d; font-weight: 600; }
+  .срок.soon { color: var(--жёлтый); }
+  .срок.ok { color: var(--зелёный); }
   .полоска {
-    height: 5px; background: #eeece7; border-radius: 3px;
+    height: 6px; background: #eeece7; border-radius: 3px;
     margin: 0.5rem 0 0.15rem; overflow: hidden;
   }
-  .полоска div { height: 5px; border-radius: 3px; }
+  .полоска div { height: 6px; border-radius: 3px; }
   .полоска .overdue { background: var(--красный); }
   .полоска .today { background: #d2691e; }
   .полоска .soon { background: var(--жёлтый); }
@@ -126,6 +162,20 @@
     margin-top: 0.5rem;
   }
   .кнопки form { display: inline; }
+  /* «Отложить» — одна кнопка, сроки раскрываются нажатием.
+     Работает без JavaScript (правило 7 заметки). */
+  .отложить { position: relative; }
+  .отложить summary {
+    list-style: none; cursor: pointer; font-size: 0.85rem;
+    padding: 0.3rem 0.7rem; border: 1px solid #cfcdc6; border-radius: 8px;
+    background: var(--лист); color: var(--серый);
+  }
+  .отложить summary::-webkit-details-marker { display: none; }
+  .отложить summary:hover { background: #f2f0eb; }
+  .отложить[open] summary { border-color: var(--текст); color: var(--текст); }
+  .отложить .варианты {
+    display: flex; gap: 0.3rem; margin-top: 0.3rem;
+  }
   button, .кнопка {
     font: inherit; font-size: 0.85rem; padding: 0.3rem 0.7rem;
     border: 1px solid #cfcdc6; background: var(--лист); color: var(--текст);
@@ -139,6 +189,35 @@
     border: 1px solid #cfcdc6; border-radius: 8px; background: var(--лист);
     color: var(--текст); min-width: 0;
   }
+  /* Карточка дела: сначала суть, потом формы (правило 8 заметки
+     «Порядок на экранах»). */
+  .состояние {
+    background: var(--лист); border: 1px solid var(--рамка);
+    border-radius: 12px; padding: 0.7rem 0.9rem; margin-bottom: 0.7rem;
+  }
+  .состояние.overdue { background: #fbeae8; border-color: #e6b0aa; }
+  .состояние.today { background: #fdeedd; border-color: #e8bf8a; }
+  .состояние.soon { background: #fdf3e2; border-color: #f0d4a3; }
+  .состояние .крупно { font-size: 1.2rem; font-weight: 600; margin: 0; }
+  .состояние .мелко {
+    font-size: 0.85rem; color: var(--серый); margin: 0.15rem 0 0;
+  }
+  .состояние.overdue .крупно { color: var(--красный); }
+  .состояние.today .крупно { color: #a9560d; }
+  .состояние.soon .крупно { color: var(--жёлтый); }
+  .факты {
+    display: grid; gap: 0.5rem; margin-bottom: 0.8rem;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  }
+  .факт {
+    background: var(--лист); border: 1px solid var(--рамка);
+    border-radius: 10px; padding: 0.5rem 0.7rem;
+  }
+  .факт .ярлык { font-size: 0.75rem; color: #96948e; margin: 0; }
+  .факт .значение { font-size: 0.9rem; margin: 0.1rem 0 0; }
+  .задним-числом { margin: 0.8rem 0; }
+  .задним-числом summary { cursor: pointer; }
+  .задним-числом[open] summary { margin-bottom: 0.6rem; }
   .шапка-раздела {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 0.6rem; margin: 0 0 0.8rem;
@@ -173,6 +252,25 @@
   .форма h2 { margin-top: 1.1rem; }
   .форма details summary { cursor: pointer; margin: 0.8rem 0 0.4rem; }
   .форма .поле input[type="checkbox"] { width: auto; }
+  /* Способ напоминания — плитки вместо выпадающего списка
+     (правило 9 заметки «Порядок на экранах»). */
+  .плитки .ряд {
+    display: grid; gap: 0.4rem;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+  .плитки.мелкие .ряд { grid-template-columns: 1fr; }
+  .плитка {
+    display: flex; align-items: center; gap: 0.45rem;
+    border: 1px solid #cfcdc6; border-radius: 10px;
+    padding: 0.5rem 0.7rem; cursor: pointer; background: var(--лист);
+  }
+  .плитка:hover { border-color: #a9a79f; }
+  .плитка input { width: auto; margin: 0; }
+  .плитка:has(input:checked) {
+    border-color: var(--текст); box-shadow: inset 0 0 0 1px var(--текст);
+  }
+  .в-строку { display: flex; gap: 0.5rem; align-items: flex-end; }
+  .в-строку .поле { flex: 1; }
 
   /* Экран пошире: меню становится колонкой слева, счётчики — под ним. */
   @media (min-width: 60rem) {
@@ -184,31 +282,43 @@
         "счётчики содержимое";
       column-gap: 1.2rem;
     }
-    .сводка { grid-template-columns: repeat(4, 1fr); }
-    .меню { grid-template-columns: 1fr; gap: 0.15rem; }
+    /* Широкий экран: лента разворачивается в колонку слева. */
+    .меню {
+      display: flex; flex-direction: column; align-items: stretch;
+      gap: 0.15rem; overflow: visible;
+    }
     .пункт {
-      flex-direction: row; align-items: baseline; gap: 0.5rem;
-      border: none; border-radius: 8px; padding: 0.35rem 0.6rem;
-      background: none;
+      justify-content: space-between; border: none; border-radius: 8px;
+      padding: 0.35rem 0.6rem; background: none;
     }
     .пункт:hover { background: #eeece7; border: none; }
     .пункт.активен { background: var(--текст); color: #fff; }
-    .пункт.активен .счёт-узко { color: #d9d7d1; }
-    .пункт .имя { font-weight: 500; font-size: 0.9rem; flex: 1; }
-    .пункт .счёт-узко { display: inline; font-size: 0.8rem; color: var(--серый); }
-    .пункт.overdue .счёт-узко { color: var(--красный); }
-    .пункт.soon .счёт-узко { color: var(--жёлтый); }
-    .пункт .счёт-широко, .пункт .всего { display: none; }
-    .пункт.empty { opacity: 0.5; }
+    .пункт .имя { font-size: 0.9rem; }
+    .пункт.overdue, .пункт.today, .пункт.soon { border: none; }
+    /* На широком экране пустые разделы сжимаются в одну строку
+       под меню — каждый остаётся ссылкой (правило 4). */
+    .пустые {
+      display: block; padding: 0 0.6rem; line-height: 1.5;
+      font-size: 0.8rem; color: #96948e;
+    }
+    .пустые .пункт.пусто {
+      display: inline; padding: 0; background: none; font-size: 0.8rem;
+    }
+    .пустые .пункт.пусто:hover { background: none; text-decoration: underline; }
+    .пустые .пункт.пусто:not(:last-child)::after { content: " · "; }
     .подпись-меню {
       display: block; font-size: 0.75rem; color: #96948e;
       margin: 0.6rem 0 0.1rem; padding-left: 0.6rem;
     }
   }
 
-  /* Совсем широкий — карточки дел в две колонки. */
+  /* Совсем широкий — карточки дел в две колонки, все одного
+     размера: ряды равны между собой, а не только внутри ряда. */
   @media (min-width: 75rem) {
-    .список { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .список {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-rows: 1fr;
+    }
   }
 </style>
 </head>

@@ -51,7 +51,7 @@ def test_novoe_delo_sozdayot_predmet_schetchik_i_schitaet_srok(
             "name": "Замена масла",
             "category": транспорт.pk,
             "новый_предмет": "Kia Rio",
-            "rule_kind": Obligation.RuleKind.METER,
+            "способ": "счётчик",
             "новый_счётчик": "Пробег",
             "единица_счётчика": "км",
             "meter_interval": "10000",
@@ -101,8 +101,8 @@ def test_ezhegodnoe_delo_iz_dnya_i_mesyaca(вошедший):
         "/new/",
         {
             "name": "Поздравить сестру",
-            "rule_kind": Obligation.RuleKind.TIME,
-            "time_kind": Obligation.TimeKind.ANNUAL,
+            "способ": "повторяется",
+            "повтор_вид": "годовщина",
             "годовщина": "14.09",
             "soon_threshold_percent": "70",
             "overdue_repeat_days": "7",
@@ -132,7 +132,7 @@ def test_pravka_menyaet_interval_i_ostavlyaet_istoriyu(вошедший, хоз�
         f"/obligation/{дело.pk}/edit/",
         {
             "name": "Масло ДВС",
-            "rule_kind": Obligation.RuleKind.METER,
+            "способ": "счётчик",
             "item": предмет.pk,
             "meter": счётчик.pk,
             "meter_interval": "8000",
@@ -228,3 +228,89 @@ def test_forma_otkryvaetsya_s_podstavlennym_razdelom(вошедший):
     текст = вошедший.get(f"/new/?раздел={дом.pk}").content.decode()
     assert "Новое дело" in текст
     assert f'value="{дом.pk}" selected' in текст
+
+
+# --- Заметка «Порядок на экранах» -------------------------------------------
+
+
+@pytest.mark.django_db
+def test_povtoryaetsya_i_eshchyo_po_schetchiku_dayot_oba_pravila(
+    вошедший, хозяин
+):
+    """Плитка «повторяется» с галочкой = прежнее «оба сразу»."""
+    предмет = Item.objects.create(name="Hyundai")
+    счётчик = Meter.objects.create(item=предмет, name="Пробег", unit="км")
+    ответ = вошедший.post(
+        "/new/",
+        {
+            "name": "Масло ДВС",
+            "способ": "повторяется",
+            "повтор_вид": "интервал",
+            "interval_value": "6",
+            "interval_unit": Obligation.IntervalUnit.MONTHS,
+            "ещё_по_счётчику": "on",
+            "item": предмет.pk,
+            "meter": счётчик.pk,
+            "meter_interval": "8000",
+            "soon_threshold_percent": "70",
+            "overdue_repeat_days": "7",
+        },
+    )
+    assert ответ.status_code == 302
+    дело = Obligation.objects.get(name="Масло ДВС")
+    assert дело.rule_kind == Obligation.RuleKind.BOTH
+    assert дело.time_kind == Obligation.TimeKind.INTERVAL
+    assert дело.meter_interval == Decimal("8000")
+
+
+@pytest.mark.django_db
+def test_delo_kogda_poluchitsya_zavoditsya_plitkoy(вошедший):
+    ответ = вошедший.post(
+        "/new/",
+        {
+            "name": "Разобрать гараж",
+            "способ": "когда_получится",
+            "soon_threshold_percent": "70",
+            "overdue_repeat_days": "7",
+        },
+    )
+    assert ответ.status_code == 302
+    дело = Obligation.objects.get(name="Разобрать гараж")
+    assert дело.rule_kind == Obligation.RuleKind.TIME
+    assert дело.time_kind == Obligation.TimeKind.SOMEDAY
+
+
+@pytest.mark.django_db
+def test_zavedyonnoe_delo_otkryvaetsya_v_svoyom_sposobe(вошедший, хозяин):
+    """Правка показывает то же правило, каким дело заведено."""
+    предмет = Item.objects.create(name="Kia")
+    счётчик = Meter.objects.create(item=предмет, name="Пробег", unit="км")
+    дело = Obligation.objects.create(
+        name="Масло",
+        item=предмет,
+        rule_kind=Obligation.RuleKind.BOTH,
+        time_kind=Obligation.TimeKind.INTERVAL,
+        interval_value=6,
+        interval_unit=Obligation.IntervalUnit.MONTHS,
+        meter=счётчик,
+        meter_interval=Decimal("8000"),
+        owner=хозяин,
+    )
+    текст = вошедший.get(f"/obligation/{дело.pk}/edit/").content.decode()
+
+    def отмечено(кусок):
+        """Стоит ли «checked» у поля — до закрывающей скобки тега."""
+        начало = текст.index(кусок)
+        return "checked" in текст[начало : текст.index(">", начало)]
+
+    assert отмечено('value="повторяется"')
+    assert отмечено('value="интервал"')
+    assert отмечено('name="ещё_по_счётчику"')
+
+
+@pytest.mark.django_db
+def test_na_forme_net_menyu_i_svodki(вошедший):
+    """Правило 2: заполняющему форму меню и сводка не нужны."""
+    текст = вошедший.get("/new/").content.decode()
+    assert "ближайший срок" not in текст
+    assert "Самое срочное" not in текст

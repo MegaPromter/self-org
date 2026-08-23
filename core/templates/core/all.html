@@ -5,10 +5,7 @@
 {% block содержимое %}
 <div class="шапка-раздела">
   <span class="название">Все дела</span>
-  <span class="подпись">
-    по срочности ·
-    <a href="{% url 'obligation_new' %}?назад={{ назад|urlencode }}">+ дело</a>
-  </span>
+  <span class="подпись">по срочности</span>
 </div>
 {% if пусто %}
   <p class="пусто">

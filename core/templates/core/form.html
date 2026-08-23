@@ -1,4 +1,4 @@
-{# Форма дела: поля идут по-человечески, лишнее прячется. #}
+{# Форма дела: способ напоминания плитками, лишнее скрыто. #}
 {% extends "core/base.html" %}
 {% block title %}{{ заголовок }} — Self-org{% endblock %}
 
@@ -17,29 +17,26 @@
   <input type="hidden" name="назад" value="{{ назад }}">
 
   {% include "core/_поле.html" with поле=форма.name %}
-  {% include "core/_поле.html" with поле=форма.category %}
 
-  <h2>К чему относится</h2>
-  {% include "core/_поле.html" with поле=форма.item %}
-  {% include "core/_поле.html" with поле=форма.новый_предмет %}
-  {% include "core/_поле.html" with поле=форма.person %}
-  {% include "core/_поле.html" with поле=форма.новый_человек %}
+  {% include "core/_плитки.html" with поле=форма.способ %}
 
-  <h2>Когда напоминать</h2>
-  {% include "core/_поле.html" with поле=форма.rule_kind %}
-
-  <div data-часть="время">
-    {% include "core/_поле.html" with поле=форма.time_kind %}
-    <div data-часть="разово">
-      {% include "core/_поле.html" with поле=форма.due_date %}
-    </div>
-    <div data-часть="интервал">
+  <div data-часть="повторяется">
+    {% include "core/_плитки.html" with поле=форма.повтор_вид мелко=True %}
+    <div data-часть="интервал" class="в-строку">
       {% include "core/_поле.html" with поле=форма.interval_value %}
       {% include "core/_поле.html" with поле=форма.interval_unit %}
     </div>
     <div data-часть="ежегодно">
       {% include "core/_поле.html" with поле=форма.годовщина %}
     </div>
+  </div>
+
+  <div data-часть="разово">
+    {% include "core/_поле.html" with поле=форма.due_date %}
+  </div>
+
+  <div data-часть="можно-счётчик">
+    {% include "core/_поле.html" with поле=форма.ещё_по_счётчику %}
   </div>
 
   <div data-часть="счётчик">
@@ -49,7 +46,13 @@
     {% include "core/_поле.html" with поле=форма.meter_interval %}
   </div>
 
-  <h2>Когда делали последний раз</h2>
+  <h2>К чему относится</h2>
+  {% include "core/_поле.html" with поле=форма.item %}
+  {% include "core/_поле.html" with поле=форма.новый_предмет %}
+  {% include "core/_поле.html" with поле=форма.person %}
+  {% include "core/_поле.html" with поле=форма.новый_человек %}
+  {% include "core/_поле.html" with поле=форма.category %}
+
   {% include "core/_поле.html" with поле=форма.последний_раз %}
   <div data-часть="счётчик">
     {% include "core/_поле.html" with поле=форма.показание_тогда %}
@@ -84,29 +87,40 @@
 {% endif %}
 
 <script>
-  // Прячем части формы, не относящиеся к выбранному правилу.
+  // Показываем только то, что нужно выбранному способу.
   // Без скрипта видны все поля — форма работает и так.
   (function () {
-    var вид = document.getElementById('id_rule_kind');
-    var повремени = document.getElementById('id_time_kind');
-    if (!вид) return;
+    var способы = document.querySelectorAll('input[name="способ"]');
+    var повторы = document.querySelectorAll('input[name="повтор_вид"]');
+    var галочка = document.getElementById('id_ещё_по_счётчику');
+    if (!способы.length) return;
+    function выбрано(узлы) {
+      for (var i = 0; i < узлы.length; i++) {
+        if (узлы[i].checked) return узлы[i].value;
+      }
+      return '';
+    }
     function показать(имя, надо) {
       document.querySelectorAll('[data-часть="' + имя + '"]').forEach(
         function (узел) { узел.hidden = !надо; }
       );
     }
     function обновить() {
-      var значение = вид.value;
-      показать('время', значение === 'time' || значение === 'both');
-      показать('счётчик', значение === 'meter' || значение === 'both');
-      var правило = повремени ? повремени.value : '';
-      показать('разово', правило === 'once');
-      показать('интервал', правило === 'interval');
-      показать('ежегодно', правило === 'annual');
-      // «Когда получится» — ни даты, ни интервала не нужно.
+      var способ = выбрано(способы);
+      var повторяется = способ === 'повторяется';
+      показать('повторяется', повторяется);
+      показать('интервал', повторяется && выбрано(повторы) !== 'годовщина');
+      показать('ежегодно', повторяется && выбрано(повторы) === 'годовщина');
+      показать('разово', способ === 'дата');
+      // «Когда получится» — ни даты, ни счётчика не нужно.
+      показать('можно-счётчик', способ && способ !== 'счётчик'
+        && способ !== 'когда_получится');
+      показать('счётчик', способ === 'счётчик'
+        || (повторяется || способ === 'дата') && галочка && галочка.checked);
     }
-    вид.addEventListener('change', обновить);
-    if (повремени) повремени.addEventListener('change', обновить);
+    способы.forEach(function (у) { у.addEventListener('change', обновить); });
+    повторы.forEach(function (у) { у.addEventListener('change', обновить); });
+    if (галочка) галочка.addEventListener('change', обновить);
     обновить();
   })();
 </script>

@@ -1,4 +1,4 @@
-{# Карточка дела: состояние, история выполнений, фактура. #}
+{# Карточка дела: сначала суть, потом формы и история. #}
 {% extends "core/base.html" %}
 {% block title %}{{ обязательство.name }} — Self-org{% endblock %}
 
@@ -11,46 +11,124 @@
 </div>
 
 {% if дело %}
-  <div class="список">{% include "core/_дело.html" %}</div>
+  <div class="состояние {{ дело.цвет }}">
+    <p class="крупно">{{ дело.срок }}</p>
+    <p class="мелко">
+      {% if дело.status.due_date %}срок {{ дело.status.due_date|date:"j E Y" }}{% endif %}
+      {% if дело.отложено_до %}· молчу до {{ дело.отложено_до|date:"j E Y" }}{% endif %}
+      {% if дело.status.message %}· {{ дело.status.message }}{% endif %}
+    </p>
+    {% if дело.status.fraction is not None %}
+      <div class="полоска">
+        <div class="{{ дело.цвет }}" style="width: {{ дело.процент }}%"></div>
+      </div>
+    {% endif %}
+  </div>
 {% else %}
-  <p class="пусто">Дело закрыто — разовое и уже выполнено.</p>
+  <div class="состояние">
+    <p class="крупно">Дело закрыто</p>
+    <p class="мелко">разовое и уже выполнено</p>
+  </div>
 {% endif %}
 
-{% include "core/_фактура.html" %}
-
-<h2>Отметить выполнение</h2>
-<form method="post" action="{% url 'completion_add' обязательство.pk %}"
-      class="карточка форма">
-  {% csrf_token %}
-  {% include "core/_поле.html" with поле=форма_выполнения.date %}
-  {% if обязательство.meter %}
-    {% include "core/_поле.html" with поле=форма_выполнения.meter_value %}
-  {% endif %}
-  {% include "core/_поле.html" with поле=форма_выполнения.cost %}
-  {% include "core/_поле.html" with поле=форма_выполнения.note %}
-  <div class="кнопки">
-    <button type="submit" class="главная">Записать</button>
+<div class="факты">
+  <div class="факт">
+    <p class="ярлык">к чему относится</p>
+    <p class="значение">{{ к_чему }}</p>
   </div>
-</form>
+  <div class="факт">
+    <p class="ярлык">как повторяется</p>
+    <p class="значение">{{ как_повторяется }}</p>
+  </div>
+  <div class="факт">
+    <p class="ярлык">последний раз</p>
+    <p class="значение">
+      {% if последний_раз %}{{ последний_раз.date|date:"j E Y" }}{% if последний_раз.meter_value %}
+        · {{ последний_раз.meter_value|floatformat:"-2" }} {{ обязательство.meter.unit }}{% endif %}
+      {% else %}отметок ещё не было{% endif %}
+    </p>
+  </div>
+  <div class="факт">
+    <p class="ярлык">потрачено</p>
+    <p class="значение">{{ расходы }}</p>
+  </div>
+</div>
+
+{% if дело %}
+  <div class="кнопки">
+    <form action="{% url 'mark_done' обязательство.pk %}" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="назад"
+             value="{% url 'obligation' обязательство.pk %}">
+      <button type="submit" class="главная">Сделано сегодня</button>
+    </form>
+    {% if дело.отложено_до %}
+      <form action="{% url 'snooze' обязательство.pk %}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="назад"
+               value="{% url 'obligation' обязательство.pk %}">
+        <input type="hidden" name="дней" value="0">
+        <button type="submit" class="мелкая">вернуть в список</button>
+      </form>
+    {% else %}
+      <details class="отложить">
+        <summary>отложить</summary>
+        <div class="варианты">
+          {% for дней in варианты_откладывания %}
+            <form action="{% url 'snooze' обязательство.pk %}" method="post">
+              {% csrf_token %}
+              <input type="hidden" name="назад"
+                     value="{% url 'obligation' обязательство.pk %}">
+              <input type="hidden" name="дней" value="{{ дней }}">
+              <button type="submit" class="мелкая">{{ дней }} дн</button>
+            </form>
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+  </div>
+{% endif %}
+
+<details class="карточка форма задним-числом">
+  <summary class="подпись">отметить задним числом</summary>
+  <form method="post" action="{% url 'completion_add' обязательство.pk %}">
+    {% csrf_token %}
+    {% include "core/_поле.html" with поле=форма_выполнения.date %}
+    {% if обязательство.meter %}
+      {% include "core/_поле.html" with поле=форма_выполнения.meter_value %}
+    {% endif %}
+    {% include "core/_поле.html" with поле=форма_выполнения.cost %}
+    {% include "core/_поле.html" with поле=форма_выполнения.note %}
+    <div class="кнопки">
+      <button type="submit" class="главная">Записать</button>
+    </div>
+  </form>
+</details>
+
+{% include "core/_фактура.html" %}
 
 <h2>История</h2>
 {% for выполнение in выполнения %}
   <div class="карточка" style="margin-bottom: 0.5rem;">
     <div class="заголовок">
       <span class="имя">{{ выполнение.date|date:"j E Y" }}</span>
+      <span class="подпись">
+        {% if выполнение.cost %}{{ выполнение.cost|floatformat:"-2" }} ₽{% endif %}
+      </span>
+    </div>
+    <p class="подпись">
+      {% if выполнение.meter_value %}{{ выполнение.meter_value|floatformat:"-2" }}
+        {{ обязательство.meter.unit }} · {% endif %}
+      {% if выполнение.done_by %}{{ выполнение.done_by }}{% endif %}
+    </p>
+    {% if выполнение.note %}<p class="фактура">{{ выполнение.note }}</p>{% endif %}
+    <div class="кнопки">
       <form method="post" action="{% url 'completion_delete' выполнение.pk %}"
             onsubmit="return confirm('Удалить эту отметку? Сроки пересчитаются.')">
         {% csrf_token %}
         <button type="submit" class="мелкая">удалить</button>
       </form>
     </div>
-    <p class="подпись">
-      {% if выполнение.meter_value %}{{ выполнение.meter_value|floatformat:"-2" }}
-        {{ обязательство.meter.unit }}{% endif %}
-      {% if выполнение.cost %}· {{ выполнение.cost|floatformat:"-2" }} ₽{% endif %}
-      {% if выполнение.done_by %}· {{ выполнение.done_by }}{% endif %}
-    </p>
-    {% if выполнение.note %}<p class="фактура">{{ выполнение.note }}</p>{% endif %}
   </div>
 {% empty %}
   <p class="пусто">Отметок ещё не было.</p>

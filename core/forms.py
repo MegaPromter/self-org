@@ -27,7 +27,48 @@ from .models import (
 
 
 class ObligationForm(forms.ModelForm):
-    """Дело: что делаем, к чему относится и когда напоминать."""
+    """Дело: что делаем, к чему относится и когда напоминать.
+
+    Способ напоминания пользователь выбирает одной плиткой
+    («повторяется», «один раз к дате», «по счётчику», «когда
+    получится»), а модельные `rule_kind` и `time_kind` форма
+    собирает сама — заметка «Порядок на экранах», правила 9–12.
+    """
+
+    ПОВТОРЯЕТСЯ = "повторяется"
+    ДАТА = "дата"
+    СЧЁТЧИК = "счётчик"
+    КОГДА_ПОЛУЧИТСЯ = "когда_получится"
+    ИНТЕРВАЛ = "интервал"
+    ГОДОВЩИНА = "годовщина"
+
+    способ = forms.ChoiceField(
+        label="когда напоминать",
+        choices=[
+            (ПОВТОРЯЕТСЯ, "повторяется"),
+            (ДАТА, "один раз к дате"),
+            (СЧЁТЧИК, "по счётчику"),
+            (КОГДА_ПОЛУЧИТСЯ, "когда получится"),
+        ],
+        widget=forms.RadioSelect,
+        required=False,
+    )
+    повтор_вид = forms.ChoiceField(
+        label="как именно",
+        choices=[
+            (ИНТЕРВАЛ, "каждые сколько-то дней, месяцев, лет"),
+            (ГОДОВЩИНА, "раз в год в один и тот же день"),
+        ],
+        widget=forms.RadioSelect,
+        required=False,
+        initial=ИНТЕРВАЛ,
+    )
+    ещё_по_счётчику = forms.BooleanField(
+        label="ещё и по счётчику",
+        required=False,
+        help_text="Например: раз в 6 месяцев или каждые 8000 км — "
+        "что наступит раньше.",
+    )
 
     новый_предмет = forms.CharField(
         label="…или новый предмет",
@@ -81,8 +122,6 @@ class ObligationForm(forms.ModelForm):
             "category",
             "item",
             "person",
-            "rule_kind",
-            "time_kind",
             "due_date",
             "interval_value",
             "interval_unit",
@@ -99,8 +138,6 @@ class ObligationForm(forms.ModelForm):
             "category": "раздел",
             "item": "предмет",
             "person": "человек",
-            "rule_kind": "когда напоминать",
-            "time_kind": "правило по времени",
             "due_date": "дата",
             "interval_value": "каждые",
             "interval_unit": "чего",
@@ -122,16 +159,39 @@ class ObligationForm(forms.ModelForm):
         self.fields["category"].queryset = Category.objects.all()
         self.fields["item"].queryset = Item.objects.all()
         self.fields["meter"].queryset = Meter.objects.select_related("item")
-        self.fields["time_kind"].required = False
-        self.fields["rule_kind"].choices = [
-            ("", "— выберите —")
-        ] + list(Obligation.RuleKind.choices)
         # Ежегодные месяц и день собираем из одного поля «14.09».
         if self.instance.pk and self.instance.annual_month:
             self.fields["годовщина"].initial = (
                 f"{self.instance.annual_day:02d}."
                 f"{self.instance.annual_month:02d}"
             )
+        if self.instance.pk:
+            self._разобрать_правило(self.instance)
+
+    def _разобрать_правило(self, дело):
+        """Показать заведённое дело в новых терминах формы.
+
+        Обратный перевод: в базе лежат `rule_kind` и `time_kind`,
+        а пользователь видит плитку и галочку (правило 12).
+        """
+        если_время = {
+            Obligation.TimeKind.ONCE: self.ДАТА,
+            Obligation.TimeKind.SOMEDAY: self.КОГДА_ПОЛУЧИТСЯ,
+        }
+        if дело.rule_kind == Obligation.RuleKind.METER:
+            self.fields["способ"].initial = self.СЧЁТЧИК
+            return
+        self.fields["способ"].initial = если_время.get(
+            дело.time_kind, self.ПОВТОРЯЕТСЯ
+        )
+        self.fields["повтор_вид"].initial = (
+            self.ГОДОВЩИНА
+            if дело.time_kind == Obligation.TimeKind.ANNUAL
+            else self.ИНТЕРВАЛ
+        )
+        self.fields["ещё_по_счётчику"].initial = (
+            дело.rule_kind == Obligation.RuleKind.BOTH
+        )
 
     # --- Проверки ----------------------------------------------------------
 
@@ -146,19 +206,58 @@ class ObligationForm(forms.ModelForm):
             raise ValidationError("Нужен день и месяц в виде 14.09.")
         return значение
 
+    def _собрать_правило(self, данные):
+        """Из плитки и галочки — модельные «вид правила» и «по времени».
+
+        Плитка «повторяется» с галочкой «ещё и по счётчику» даёт
+        прежний вариант «оба сразу — что раньше» (правило 12).
+        """
+        способ = данные.get("способ")
+        if способ == self.СЧЁТЧИК:
+            return Obligation.RuleKind.METER, ""
+        по_времени = {
+            self.ДАТА: Obligation.TimeKind.ONCE,
+            self.КОГДА_ПОЛУЧИТСЯ: Obligation.TimeKind.SOMEDAY,
+        }.get(способ)
+        if по_времени is None:
+            по_времени = (
+                Obligation.TimeKind.ANNUAL
+                if данные.get("повтор_вид") == self.ГОДОВЩИНА
+                else Obligation.TimeKind.INTERVAL
+            )
+        # «Когда получится» и счётчик друг с другом не сочетаются:
+        # у дела без срока считать по пробегу нечего.
+        со_счётчиком = данные.get("ещё_по_счётчику") and способ != (
+            self.КОГДА_ПОЛУЧИТСЯ
+        )
+        вид = (
+            Obligation.RuleKind.BOTH
+            if со_счётчиком
+            else Obligation.RuleKind.TIME
+        )
+        return вид, по_времени
+
     def clean(self):
         данные = super().clean()
-        вид = данные.get("rule_kind")
+        if not данные.get("способ"):
+            self.add_error("способ", "Выберите, когда напоминать.")
+            return данные
+
+        вид, по_времени = self._собрать_правило(данные)
+        # Модельные поля формой не показываются — заполняем сами,
+        # проверит их `Obligation.clean` при сохранении.
+        self.instance.rule_kind = вид
+        self.instance.time_kind = по_времени
+        данные["rule_kind"] = вид
+        данные["time_kind"] = по_времени
+
         нужно_время = вид in (Obligation.RuleKind.TIME, Obligation.RuleKind.BOTH)
         нужен_счётчик = вид in (
             Obligation.RuleKind.METER,
             Obligation.RuleKind.BOTH,
         )
 
-        if not вид:
-            self.add_error("rule_kind", "Выберите, когда напоминать.")
-
-        if нужно_время and данные.get("time_kind") == Obligation.TimeKind.ANNUAL:
+        if нужно_время and по_времени == Obligation.TimeKind.ANNUAL:
             if not данные.get("годовщина"):
                 self.add_error("годовщина", "Укажите день и месяц, например 14.09.")
             else:
