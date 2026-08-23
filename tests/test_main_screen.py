@@ -567,3 +567,22 @@ def test_zakrytoe_razovoe_delo_tozhe_so_znachkom(вошедший, хозяин)
     Completion.objects.create(obligation=дело, date=дней_назад(9))
     текст = вошедший.get(f"/obligation/{дело.pk}/").content.decode()
     assert "#и-участок" in текст and "Хозяйство" in текст
+
+
+@pytest.mark.django_db
+def test_pravka_dostupna_pryamo_iz_spiska(вошедший, дела):
+    """Кнопка «править» стоит в карточке и возвращает на тот же экран.
+
+    Раньше правка пряталась за нажатием на название дела —
+    догадаться было нельзя, особенно на телефоне без наведения мыши.
+    """
+    главная = вошедший.get("/").content.decode()
+    assert f"/obligation/{дела[0].pk}/edit/?назад=" in главная
+    assert ">править</a>" in главная
+
+    # Ссылка рабочая: форма правки открывается и знает дело.
+    страница = вошедший.get(
+        f"/obligation/{дела[0].pk}/edit/", {"назад": "/"}
+    )
+    assert страница.status_code == 200
+    assert дела[0].name in страница.content.decode()

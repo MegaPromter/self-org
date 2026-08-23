@@ -220,6 +220,12 @@
     border-radius: 8px; cursor: pointer;
   }
   button.мелкая { font-size: 0.78rem; padding: 0.2rem 0.5rem; }
+  /* Ссылка в ряду кнопок («править»): выглядит как «отложить»,
+     чтобы не спорить с чёрной «Сделано». */
+  a.кнопка {
+    display: inline-block; text-decoration: none; color: var(--серый);
+  }
+  a.кнопка:hover { color: var(--текст); }
   button:hover { background: #f2f0eb; }
   button.главная { background: var(--текст); color: #fff; border-color: var(--текст); }
   input[type="text"], input[type="password"], input[type="number"] {
