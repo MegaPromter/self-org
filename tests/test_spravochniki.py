@@ -18,6 +18,7 @@ from core.models import (
     Obligation,
     Person,
 )
+from core.значки import НАБОР as ЗНАЧКИ
 
 СЕГОДНЯ = timezone.localdate()
 
@@ -165,3 +166,51 @@ def test_chelovek_zavoditsya_s_dnyom_rozhdeniya(вошедший):
 def test_spravochniki_trebuyut_vhoda(client):
     ответ = client.get("/catalog/")
     assert ответ.status_code == 302 and "/login/" in ответ["Location"]
+
+
+# --- Значки разделов (заметка «Значки разделов») ---------------------------
+
+
+@pytest.mark.django_db
+def test_novomu_razdelu_znachok_podbiraetsya_po_nazvaniyu(вошедший):
+    """Не выбрали — подставим по названию; не угадали — остаётся пусто."""
+    вошедший.post("/category/new/", {"name": "Гараж", "order": "80"})
+    assert Category.objects.get(name="Гараж").icon == "машина"
+
+    вошедший.post("/category/new/", {"name": "Тётя Валя", "order": "90"})
+    assert Category.objects.get(name="Тётя Валя").icon == ""
+
+
+@pytest.mark.django_db
+def test_vybrannyy_rukami_znachok_silnee_podbora(вошедший):
+    """Выбор пользователя не перебивается подбором."""
+    вошедший.post(
+        "/category/new/", {"name": "Дача", "order": "85", "icon": "спорт"}
+    )
+    assert Category.objects.get(name="Дача").icon == "спорт"
+
+
+@pytest.mark.django_db
+def test_snyatyy_znachok_ne_vozvrashchaetsya(вошедший):
+    """Сняли значок при правке — сохранение не подставит его снова."""
+    вошедший.post("/category/new/", {"name": "Мотоцикл", "order": "86"})
+    раздел = Category.objects.get(name="Мотоцикл")
+    assert раздел.icon == "машина"
+
+    вошедший.post(
+        f"/category/{раздел.pk}/edit/",
+        {"name": "Мотоцикл", "order": "86", "icon": ""},
+    )
+    раздел.refresh_from_db()
+    assert раздел.icon == ""
+
+
+@pytest.mark.django_db
+def test_spravochnik_i_forma_pokazyvayut_znachki(вошедший):
+    """В списке разделов значок виден, в форме — выбор плитками."""
+    список = вошедший.get("/catalog/").content.decode()
+    assert "#и-машина" in список  # Транспорт из стартового набора
+
+    форма = вошедший.get("/category/new/").content.decode()
+    assert "значки-выбор" in форма and "без значка" in форма
+    assert форма.count('type="radio"') == len(ЗНАЧКИ) + 1  # плюс «без значка»

@@ -138,6 +138,17 @@ def порядок(текст, *имена):
     return места
 
 
+def карточка(текст, имя):
+    """Кусок страницы от названия дела до его кнопки «Сделано».
+
+    Нужен, чтобы отличать содержимое карточки от ленты разделов
+    сверху: слово «Транспорт» на странице есть всегда, вопрос —
+    осталось ли оно ещё и в подписи дела.
+    """
+    начало = текст.index(имя)
+    return текст[начало : текст.index("Сделано", начало)]
+
+
 # --- Плитки разделов и страница раздела ------------------------------------
 
 
@@ -499,3 +510,60 @@ def test_knopka_novogo_dela_odna_i_znaet_razdel(вошедший, дела):
     # На странице раздела кнопка подставляет этот раздел
     # (в адресе имена параметров закодированы — раскрываем).
     assert f"раздел={транспорт.pk}" in unquote(текст)
+
+
+# --- Значки разделов (заметка «Значки разделов») ---------------------------
+
+
+@pytest.mark.django_db
+def test_znachok_zamenyaet_slovo_razdela_v_kartochke(вошедший, дела):
+    """В подписи карточки вместо слова раздела — его значок."""
+    кусок = карточка(вошедший.get("/all/").content.decode(), "Тормозная")
+    assert "#и-машина" in кусок  # значок «Транспорта»
+    assert "Транспорт" not in кусок  # слово ушло, строка короче
+    assert "Kia" in кусок  # остальная подпись на месте
+
+
+@pytest.mark.django_db
+def test_razdel_bez_znachka_ostavlyaet_slovo(вошедший, дела):
+    """Значка нет — показываем слово, пустого кружка не рисуем."""
+    дом = Category.objects.get(name="Дом")
+    дом.icon = ""
+    дом.save()
+    кусок = карточка(вошедший.get("/all/").content.decode(), "Фильтр воды")
+    assert "Дом" in кусок and "кружок" not in кусок
+
+
+@pytest.mark.django_db
+def test_znachok_v_lente_i_v_shapke_razdela(вошедший, дела):
+    """Значок в ленте и в шапке раздела стоит рядом со словом."""
+    главная = вошедший.get("/").content.decode()
+    assert "#и-машина" in главная and "Транспорт" in главная
+
+    транспорт = Category.objects.get(name="Транспорт")
+    страница = вошедший.get(f"/section/{транспорт.pk}/").content.decode()
+    # Кружок в шапке крупный, оттенок — тот же, что у карточек дел.
+    assert "кружок к1 крупный" in страница and "Транспорт" in страница
+
+
+@pytest.mark.django_db
+def test_znachok_v_kartochke_dela(вошедший, дела):
+    """На карточке дела значок стоит перед «к чему относится»."""
+    текст = вошедший.get(f"/obligation/{дела[0].pk}/").content.decode()
+    assert "#и-машина" in текст and "Kia · Транспорт" in текст
+
+
+@pytest.mark.django_db
+def test_zakrytoe_razovoe_delo_tozhe_so_znachkom(вошедший, хозяин):
+    """Карточка выполненного разового дела не теряет значок раздела."""
+    дело = Obligation.objects.create(
+        name="Забрать посылку",
+        rule_kind=Obligation.RuleKind.TIME,
+        time_kind=Obligation.TimeKind.ONCE,
+        due_date=дней_назад(10),
+        owner=хозяин,
+        category=Category.objects.get(name="Хозяйство"),
+    )
+    Completion.objects.create(obligation=дело, date=дней_назад(9))
+    текст = вошедший.get(f"/obligation/{дело.pk}/").content.decode()
+    assert "#и-участок" in текст and "Хозяйство" in текст

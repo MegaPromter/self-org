@@ -1,0 +1,25 @@
+{% comment %}
+  Выбор значка раздела: те же радиокнопки, только показаны
+  плитками с картинками. Сама кнопка спрятана, но остаётся
+  на месте — выбор работает мышью, пальцем, клавиатурой
+  и без JavaScript.
+{% endcomment %}
+<div class="значки-выбор">
+  {% for группа, варианты, индекс in widget.optgroups %}
+    {% for вариант in варианты %}
+      <label class="значок-вариант">
+        <input type="radio" name="{{ вариант.name }}"
+               value="{{ вариант.value|stringformat:'s' }}"
+               {% if вариант.selected %}checked{% endif %}>
+        {% if вариант.value %}
+          <svg class="картинка"><use href="#и-{{ вариант.value }}"></use></svg>
+        {% else %}
+          <svg class="картинка пусто" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8.4"/><path d="M6.6 17.4 17.4 6.6"/>
+          </svg>
+        {% endif %}
+        <span class="имя">{{ вариант.label }}</span>
+      </label>
+    {% endfor %}
+  {% endfor %}
+</div>

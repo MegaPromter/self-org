@@ -24,6 +24,7 @@ from .models import (
     Obligation,
     Person,
 )
+from .значки import НАБОР as ЗНАЧКИ
 
 
 class ObligationForm(forms.ModelForm):
@@ -446,13 +447,33 @@ class MeterReadingForm(forms.ModelForm):
         widgets = {"date": forms.DateInput(attrs={"type": "date"})}
 
 
+class ВыборЗначка(forms.RadioSelect):
+    """Плитки с картинками вместо выпадающего списка.
+
+    Это обычные радиокнопки — просто с другим шаблоном вывода,
+    поэтому выбор работает и без JavaScript.
+    """
+
+    template_name = "core/_выбор-значка.html"
+
+
 class CategoryForm(forms.ModelForm):
     """Раздел: транспорт, дом, семья…"""
 
     class Meta:
         model = Category
-        fields = ["name", "order"]
-        labels = {"name": "название", "order": "порядок"}
+        fields = ["name", "order", "icon"]
+        labels = {"name": "название", "order": "порядок", "icon": "значок"}
+        widgets = {"icon": ВыборЗначка}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Пустой вариант называем словами: «---------» ничего
+        # не говорит, а «без значка» — законный выбор.
+        self.fields["icon"].choices = [("", "без значка")] + list(ЗНАЧКИ)
+        self.fields["icon"].help_text = (
+            "Не выберете — подставим по названию раздела."
+        )
 
 
 class FactForm(forms.ModelForm):

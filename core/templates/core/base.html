@@ -69,7 +69,9 @@
   }
   .меню::-webkit-scrollbar { display: none; }
   .пункт {
-    display: flex; align-items: baseline; gap: 0.35rem;
+    /* По центру, а не по базовой линии: рядом с текстом теперь
+       стоит кружок со значком. */
+    display: flex; align-items: center; gap: 0.35rem;
     background: var(--лист); border: 1px solid var(--рамка);
     border-radius: 999px; padding: 0.3rem 0.75rem;
     text-decoration: none; color: var(--текст); white-space: nowrap;
@@ -92,6 +94,37 @@
   .пустые { display: contents; }
   .пункт.пусто { color: var(--серый); opacity: 0.75; }
   .подпись-меню { display: none; }
+  /* Значок раздела в кружке его оттенка (вариант «В» мокапа
+     2026-08-23). Цвет кружка тот же, что у карточек дел раздела:
+     цвет и картинка узнаются вместе. */
+  .набор-значков { display: none; }
+  .кружок {
+    width: 26px; height: 26px; border-radius: 999px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    vertical-align: middle;
+  }
+  .кружок svg {
+    width: 16px; height: 16px; stroke: currentColor; fill: none;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* В списке дел кружок мелкий: рамка «просрочено» должна
+     оставаться главной на экране (правило 4 заметки «Значки
+     разделов»). */
+  .кружок.мал { width: 20px; height: 20px; }
+  .кружок.мал svg { width: 13px; height: 13px; }
+  .кружок.крупный { width: 34px; height: 34px; }
+  .кружок.крупный svg { width: 21px; height: 21px; }
+  .кружок.к1 { background: #dfe8f1; color: #2f5b80; }
+  .кружок.к2 { background: #e2ecdd; color: #41693a; }
+  .кружок.к3 { background: #f0e8d2; color: #7a6427; }
+  .кружок.к4 { background: #f2ded7; color: #8a4a3a; }
+  .кружок.к5 { background: #e5dff0; color: #5a4a7d; }
+  .кружок.к6 { background: #d9eae7; color: #2f6b62; }
+  .кружок.к7 { background: #eae0d6; color: #7a5c44; }
+  .кружок.к8 { background: #dee7ea; color: #3d6470; }
+  /* На тёмном активном пункте меню кружок держит свой цвет,
+     иначе он сливается с подсветкой. */
+  .пункт.активен .кружок { box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
   .строка {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 0.6rem;
@@ -127,6 +160,11 @@
   .заголовок { display: flex; justify-content: space-between; gap: 0.5rem; }
   .имя { font-weight: 600; }
   .подпись { color: var(--серый); font-size: 0.85rem; margin: 0.1rem 0 0; }
+  /* Подпись со значком вместо слова раздела: кружок и текст
+     в одну строку (правило 5 заметки «Значки разделов»). */
+  .подпись.со-значком {
+    display: flex; align-items: center; gap: 0.3rem;
+  }
   .фактура { color: var(--серый); font-size: 0.8rem; margin: 0.35rem 0 0; }
   .метка {
     font-size: 0.72rem; padding: 0.1rem 0.5rem; border-radius: 999px;
@@ -215,13 +253,19 @@
   }
   .факт .ярлык { font-size: 0.75rem; color: #96948e; margin: 0; }
   .факт .значение { font-size: 0.9rem; margin: 0.1rem 0 0; }
+  .факт .значение.со-значком {
+    display: flex; align-items: center; gap: 0.35rem;
+  }
   .задним-числом { margin: 0.8rem 0; }
   .задним-числом summary { cursor: pointer; }
   .задним-числом[open] summary { margin-bottom: 0.6rem; }
   .шапка-раздела {
-    display: flex; align-items: baseline; justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between;
     gap: 0.6rem; margin: 0 0 0.8rem;
   }
+  /* Значок и текст одной группой слева: и в шапке раздела,
+     и в строке справочника. */
+  .слева { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
   .шапка-раздела .название { font-size: 1.25rem; font-weight: 600; }
   .сообщение {
     border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.7rem;
@@ -269,6 +313,31 @@
   .плитка:has(input:checked) {
     border-color: var(--текст); box-shadow: inset 0 0 0 1px var(--текст);
   }
+  /* Выбор значка раздела: плитки с картинками. Сама радиокнопка
+     спрятана, но не убрана — иначе выбор перестал бы работать
+     с клавиатуры. */
+  .значки-выбор {
+    display: grid; gap: 0.35rem;
+    grid-template-columns: repeat(auto-fill, minmax(5.4rem, 1fr));
+  }
+  .значок-вариант {
+    display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+    padding: 0.45rem 0.25rem; border: 1px solid #cfcdc6; border-radius: 10px;
+    background: var(--лист); cursor: pointer;
+    font-size: 0.72rem; color: var(--серый);
+  }
+  .значок-вариант input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .значок-вариант .картинка {
+    width: 22px; height: 22px; stroke: currentColor; fill: none;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .значок-вариант .картинка.пусто { color: #b8b6ae; }
+  .значок-вариант:hover { border-color: #a9a79f; }
+  .значок-вариант:has(input:checked) {
+    border-color: var(--текст); box-shadow: inset 0 0 0 1px var(--текст);
+    color: var(--текст);
+  }
+  .значок-вариант:has(input:focus-visible) { outline: 2px solid #8ab4d8; }
   .в-строку { display: flex; gap: 0.5rem; align-items: flex-end; }
   .в-строку .поле { flex: 1; }
 
@@ -339,6 +408,7 @@
   {% for сообщение in messages %}
     <div class="сообщение {{ сообщение.tags }}">{{ сообщение }}</div>
   {% endfor %}
+  {% include "core/_значки.html" %}
   {% include "core/_стоимость.html" %}
   <div class="оболочка {% if not меню %}одна-колонка{% endif %}">
     {% if меню %}

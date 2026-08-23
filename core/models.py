@@ -21,6 +21,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+from .значки import НАБОР as ЗНАЧКИ, подобрать
+
 
 class Fact(models.Model):
     """Строка фактуры: «название — значение» и необязательный файл.
@@ -62,6 +64,13 @@ class Category(models.Model):
     order = models.PositiveSmallIntegerField(
         "порядок", default=100, help_text="Чем меньше, тем левее плашка."
     )
+    icon = models.CharField(
+        "значок",
+        max_length=20,
+        blank=True,
+        choices=ЗНАЧКИ,
+        help_text="Картинка раздела в меню и на карточках. Необязательно.",
+    )
 
     class Meta:
         verbose_name = "раздел"
@@ -70,6 +79,17 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        """Новому разделу значок подбирается по названию.
+
+        Только при заведении: если потом значок сняли руками,
+        сохранение не подставит его заново — иначе «без значка»
+        было бы невозможно (правило 6 заметки «Значки разделов»).
+        """
+        if self._state.adding and not self.icon:
+            self.icon = подобрать(self.name)
+        super().save(*args, **kwargs)
 
 
 class Item(models.Model):

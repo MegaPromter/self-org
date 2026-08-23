@@ -51,8 +51,8 @@ class CompletionInline(admin.TabularInline):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ["name", "order"]
-    list_editable = ["order"]  # порядок плашек на главном экране
+    list_display = ["name", "order", "icon"]
+    list_editable = ["order", "icon"]  # порядок плашек и значок
 
 
 @admin.register(Item)

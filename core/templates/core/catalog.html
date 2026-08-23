@@ -53,13 +53,16 @@
 {% endfor %}
 
 <h2>Разделы <a class="добавить" href="{% url 'category_new' %}">+ добавить</a></h2>
-{% for раздел in разделы %}
+{% for строка in разделы %}
   <div class="карточка строка">
-    <div>
-      <span class="имя">{{ раздел.name }}</span>
-      <p class="подпись">порядок {{ раздел.order }}</p>
+    <div class="слева">
+      {% include "core/_значок.html" with значок=строка.значок кружок=строка.кружок размер="" %}
+      <div>
+        <span class="имя">{{ строка.раздел.name }}</span>
+        <p class="подпись">порядок {{ строка.раздел.order }}</p>
+      </div>
     </div>
-    <a class="подпись" href="{% url 'category_edit' раздел.pk %}">править</a>
+    <a class="подпись" href="{% url 'category_edit' строка.раздел.pk %}">править</a>
   </div>
 {% endfor %}
 
