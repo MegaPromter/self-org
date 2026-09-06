@@ -422,37 +422,11 @@ def test_forma_ne_sozdayot_schetchik_i_vedyot_v_spravochniki(вошедший):
     assert not Item.objects.filter(name="Hyundai Tucson").exists()
 
 
-@pytest.mark.django_db
-def test_tekushchee_pokazanie_zapisyvaetsya_segodnyashnim_chislom(
-    вошедший,
-):
-    """Правило 1: текущее показание — запись в истории датой сегодня."""
-    предмет = Item.objects.create(name="Hyundai Tucson")
-    счётчик = Meter.objects.create(item=предмет, name="пробег", unit="км")
-    ответ = вошедший.post(
-        "/new/",
-        {
-            "name": "Замена ДВС",
-            "item": предмет.pk,
-            "способ": "счётчик",
-            "meter": счётчик.pk,
-            "meter_interval": "6000",
-            "текущее_показание": "118400",
-            "soon_threshold_percent": "70",
-            "overdue_repeat_days": "7",
-        },
-    )
-    assert ответ.status_code == 302
-    [показание] = счётчик.readings.all()
-    assert (показание.value, показание.date) == (Decimal("118400"), СЕГОДНЯ)
-    # Правило 6: где счётчик сейчас — известно, когда делали — нет.
-    дело = Obligation.objects.get(name="Замена ДВС")
-    assert compute_status(дело, СЕГОДНЯ).state is State.NO_DATA
-
-
 @pytest.fixture
 def дело_со_счётчиком(хозяин):
-    предмет = Item.objects.create(name="Hyundai Tucson")
+    предмет = Item.objects.create(
+        name="Hyundai Tucson", category=Category.objects.get(name="Транспорт")
+    )
     счётчик = Meter.objects.create(item=предмет, name="пробег", unit="км")
     MeterReading.objects.create(
         meter=счётчик, value=Decimal("118400"), date=дней_назад(3)
@@ -482,13 +456,37 @@ def _правка(client, дело, **поля):
 
 
 @pytest.mark.django_db
-def test_forma_pravki_pokazyvaet_edinicu_v_spiske_i_poslednee_pokazanie(
+def test_forma_pravki_odno_pokazanie_i_probeg_u_avtomobilya(
     вошедший, дело_со_счётчиком
 ):
-    """Пункты 2–3: единица в списке выбора, последнее показание в поле."""
+    """Заметка «…одно показание»: единица в списке, «текущего показания»
+    нет, у автомобиля поле зовётся «пробег в день выполнения»."""
     текст = вошедший.get(f"/obligation/{дело_со_счётчиком.pk}/edit/").content.decode()
     assert "пробег (км) — Hyundai Tucson" in текст
-    assert 'name="текущее_показание"' in текст and 'value="118400.00"' in текст
+    assert 'name="текущее_показание"' not in текст
+    # именно подпись поля: строка есть и в скрипте страницы
+    assert 'class="подпись">пробег в день выполнения</label>' in текст
+    assert 'data-транспорт="1"' in текст  # признак для скрипта формы
+
+
+@pytest.mark.django_db
+def test_u_vodomera_pole_zovyotsya_pokazaniem(вошедший, хозяин):
+    квартира = Item.objects.create(
+        name="Квартира", category=Category.objects.get(name="Дом")
+    )
+    водомер = Meter.objects.create(item=квартира, name="вода", unit="м³")
+    дело = Obligation.objects.create(
+        name="Подать показания",
+        item=квартира,
+        rule_kind=Obligation.RuleKind.METER,
+        meter=водомер,
+        meter_interval=Decimal("10"),
+        owner=хозяин,
+    )
+    текст = вошедший.get(f"/obligation/{дело.pk}/edit/").content.decode()
+    assert 'class="подпись">показание в день выполнения</label>' in текст
+    assert 'class="подпись">пробег в день выполнения</label>' not in текст
+    assert "data-транспорт=" not in текст  # в скрипте есть только имя признака
 
 
 @pytest.mark.django_db
@@ -537,25 +535,3 @@ def test_posledniy_raz_pokazyvaet_otmetku_i_ne_plodit_dubli(
     _правка(вошедший, дело, последний_раз=дней_назад(1).isoformat())
     assert дело.completions.count() == 2  # новая дата — новая отметка
 
-
-@pytest.mark.django_db
-def test_sohranenie_bez_pravok_ne_plodit_pokazaniya(вошедший, дело_со_счётчиком):
-    """Правило 1: равное последнему не пишется, изменённое — пишется."""
-    счётчик = дело_со_счётчиком.meter
-    _правка(вошедший, дело_со_счётчиком, текущее_показание="118400")
-    assert счётчик.readings.count() == 1
-    _правка(вошедший, дело_со_счётчиком, текущее_показание="118900")
-    assert счётчик.readings.count() == 2
-    assert счётчик.readings.first().value == Decimal("118900")
-
-
-@pytest.mark.django_db
-def test_pokazanie_menshe_predydushchego_zapisyvaetsya_s_preduprezhdeniem(
-    вошедший, дело_со_счётчиком
-):
-    """Правило 2: как у кнопки «Ввести показание» — пишем и предупреждаем."""
-    ответ = _правка(вошедший, дело_со_счётчиком, текущее_показание="100000")
-    assert дело_со_счётчиком.meter.readings.count() == 2
-    текст = ответ.content.decode()
-    # тысячи разделяются неразрывным пробелом (short_number)
-    assert "меньше предыдущего" in текст and "118 400 км" in текст

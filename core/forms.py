@@ -16,7 +16,6 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils.html import format_html
 
-from . import actions
 from .models import (
     Category,
     Completion,
@@ -27,8 +26,31 @@ from .models import (
     Obligation,
     Person,
 )
-from .status import short_number
 from .значки import НАБОР as ЗНАЧКИ
+
+
+ТРАНСПОРТ = "Транспорт"
+
+
+def транспортный(счётчик):
+    """Счётчик автомобиля: предмет в разделе «Транспорт». Раздел
+    переименовали — подпись станет общей, данные не пострадают."""
+    раздел = счётчик.item.category
+    return bool(раздел) and раздел.name == ТРАНСПОРТ
+
+
+class ВыборСчётчика(forms.Select):
+    """Список счётчиков, где у пунктов автомобиля стоит data-транспорт:
+    по нему скрипт формы подписывает поле «пробег…», а не «показание…»
+    (заметка «Счётчик в форме дела: одно показание»)."""
+
+    транспортные = frozenset()
+
+    def create_option(self, name, value, *args, **kwargs):
+        пункт = super().create_option(name, value, *args, **kwargs)
+        if getattr(value, "value", value) in self.транспортные:
+            пункт["attrs"]["data-транспорт"] = "1"
+        return пункт
 
 
 def календарь():
@@ -109,19 +131,13 @@ class ObligationForm(forms.ModelForm):
         ),
     )
     показание_тогда = forms.DecimalField(
-        label="показание счётчика тогда",
-        max_digits=12,
-        decimal_places=2,
-        required=False,
-    )
-    текущее_показание = forms.DecimalField(
-        label="текущее показание",
+        label="показание в день выполнения",
         max_digits=12,
         decimal_places=2,
         required=False,
         help_text=(
-            "Что на счётчике сейчас, например 118 400. "
-            "Запишется как показание на сегодня."
+            "От него считается «каждые N км». "
+            "Для машины — пробег в тот день, например 118 000."
         ),
     )
 
@@ -186,14 +202,21 @@ class ObligationForm(forms.ModelForm):
             'Нет нужного счётчика? <a href="{}">Создайте его в справочниках</a>.',
             reverse("meter_new"),
         )
-        # Предупреждение о «поехавшем назад» показании — для экрана.
-        self.предупреждение = ""
-        if self.instance.pk and self.instance.meter_id:
-            последнее = self.instance.meter.readings.order_by(
-                "-date", "-id"
-            ).first()
-            if последнее:
-                self.fields["текущее_показание"].initial = последнее.value
+        # У автомобиля поле про показание называется «пробег…»:
+        # на сервере — по счётчику дела, в браузере — по выбранному
+        # пункту списка (скрипт формы читает data-транспорт).
+        self.fields["meter"].widget = ВыборСчётчика(
+            choices=self.fields["meter"].choices
+        )
+        self.fields["meter"].widget.транспортные = frozenset(
+            м.pk for м in self.fields["meter"].queryset.select_related(
+                "item__category"
+            ) if транспортный(м)
+        )
+        if self.instance.pk and self.instance.meter_id and транспортный(
+            self.instance.meter
+        ):
+            self.fields["показание_тогда"].label = "пробег в день выполнения"
         # «Когда делали последний раз» — это последняя отметка выполнения.
         # Показываем её в форме, иначе поле выглядит несохранённым,
         # а каждое сохранение с датой плодило бы дубль отметки.
@@ -342,11 +365,11 @@ class ObligationForm(forms.ModelForm):
                 ),
             )
 
-        for поле in ("показание_тогда", "текущее_показание"):
-            if данные.get(поле) is not None and not данные.get("meter"):
-                self.add_error(
-                    поле, "Показание записывать некуда — у дела нет счётчика."
-                )
+        if данные.get("показание_тогда") is not None and not данные.get("meter"):
+            self.add_error(
+                "показание_тогда",
+                "Показание записывать некуда — у дела нет счётчика.",
+            )
         return данные
 
     def _post_clean(self):
@@ -418,32 +441,11 @@ class ObligationForm(forms.ModelForm):
                     date=данные["последний_раз"],
                     defaults={"value": показание},
                 )
-        self._записать_текущее_показание(дело, данные.get("текущее_показание"))
         return дело
 
     def _дата_последней(self):
         """Дата последней отметки, подставленная в форму (None у нового)."""
         return self._последняя.date if self._последняя else None
-
-    def _записать_текущее_показание(self, дело, значение):
-        """Текущее показание — той же функцией, что кнопка на главной.
-
-        Равное последнему не пишем: форма открыта-сохранена без правок
-        не должна плодить записи (правило 1). Меньшее — пишем,
-        но запоминаем предупреждение для экрана (правило 2).
-        """
-        if значение is None or not дело.meter:
-            return
-        последнее = дело.meter.readings.order_by("-date", "-id").first()
-        if последнее and последнее.value == значение:
-            return
-        _, подозрительное = actions.add_reading(дело.meter, значение)
-        if подозрительное:
-            self.предупреждение = (
-                f"Текущее показание меньше предыдущего "
-                f"({short_number(подозрительное.value)} {дело.meter.unit}) — "
-                f"проверьте, не опечатка ли."
-            )
 
 
 class CompletionForm(forms.ModelForm):

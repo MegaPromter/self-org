@@ -50,7 +50,6 @@
   <div data-часть="счётчик">
     {% include "core/_поле.html" with поле=форма.meter %}
     {% include "core/_поле.html" with поле=форма.meter_interval %}
-    {% include "core/_поле.html" with поле=форма.текущее_показание %}
   </div>
 
   <h2>К чему относится</h2>
@@ -100,7 +99,17 @@
     var способы = document.querySelectorAll('input[name="способ"]');
     var повторы = document.querySelectorAll('input[name="повтор_вид"]');
     var галочка = document.getElementById('id_ещё_по_счётчику');
+    var выборСчётчика = document.getElementById('id_meter');
+    var подписьПоказания = document.querySelector('label[for="id_показание_тогда"]');
     if (!способы.length) return;
+    // У автомобиля поле про показание зовётся «пробег…» — по признаку
+    // data-транспорт у выбранного пункта списка счётчиков.
+    function подписать() {
+      if (!выборСчётчика || !подписьПоказания) return;
+      var пункт = выборСчётчика.options[выборСчётчика.selectedIndex];
+      подписьПоказания.textContent = пункт && пункт.getAttribute('data-транспорт')
+        ? 'пробег в день выполнения' : 'показание в день выполнения';
+    }
     function выбрано(узлы) {
       for (var i = 0; i < узлы.length; i++) {
         if (узлы[i].checked) return узлы[i].value;
@@ -128,7 +137,9 @@
     способы.forEach(function (у) { у.addEventListener('change', обновить); });
     повторы.forEach(function (у) { у.addEventListener('change', обновить); });
     if (галочка) галочка.addEventListener('change', обновить);
+    if (выборСчётчика) выборСчётчика.addEventListener('change', подписать);
     обновить();
+    подписать();
   })();
 </script>
 {% endblock %}
