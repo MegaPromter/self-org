@@ -31,6 +31,13 @@ from .status import short_number
 from .значки import НАБОР as ЗНАЧКИ
 
 
+def календарь():
+    """Поле-календарь браузера. Формат обязателен: <input type="date">
+    понимает только «2026-08-31», а Django по умолчанию подставил бы
+    «31.08.2026» — и при правке дата выглядела бы пустой."""
+    return forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
+
+
 class ObligationForm(forms.ModelForm):
     """Дело: что делаем, к чему относится и когда напоминать.
 
@@ -95,7 +102,7 @@ class ObligationForm(forms.ModelForm):
     последний_раз = forms.DateField(
         label="когда делали последний раз",
         required=False,
-        widget=forms.DateInput(attrs={"type": "date"}),
+        widget=календарь(),
         help_text=(
             "Необязательно. Заполните — и система сразу посчитает "
             "следующий срок, а не будет просить отметку."
@@ -151,8 +158,8 @@ class ObligationForm(forms.ModelForm):
             "notes": "заметка",
         }
         widgets = {
-            "due_date": forms.DateInput(attrs={"type": "date"}),
-            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "due_date": календарь(),
+            "start_date": календарь(),
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -187,6 +194,19 @@ class ObligationForm(forms.ModelForm):
             ).first()
             if последнее:
                 self.fields["текущее_показание"].initial = последнее.value
+        # «Когда делали последний раз» — это последняя отметка выполнения.
+        # Показываем её в форме, иначе поле выглядит несохранённым,
+        # а каждое сохранение с датой плодило бы дубль отметки.
+        self._последняя = None
+        if self.instance.pk:
+            self._последняя = self.instance.completions.order_by(
+                "-date", "-id"
+            ).first()
+            if self._последняя:
+                self.fields["последний_раз"].initial = self._последняя.date
+                self.fields["показание_тогда"].initial = (
+                    self._последняя.meter_value
+                )
         # Ежегодные месяц и день собираем из одного поля «14.09».
         if self.instance.pk and self.instance.annual_month:
             self.fields["годовщина"].initial = (
@@ -290,8 +310,13 @@ class ObligationForm(forms.ModelForm):
         # Поле там спрятано, так что молча очищаем, а не ругаемся.
         if по_времени != Obligation.TimeKind.INTERVAL:
             данные["start_date"] = None
-        elif данные.get("start_date") and данные.get("последний_раз"):
+        elif (
+            данные.get("start_date")
+            and данные.get("последний_раз")
+            and данные["последний_раз"] != self._дата_последней()
+        ):
             # Правило 4: две точки отсчёта разом — противоречие.
+            # Подставленная из истории дата — не новая точка отсчёта.
             self.add_error(
                 "start_date",
                 "Выберите что-то одно: либо когда делали последний раз, "
@@ -372,12 +397,21 @@ class ObligationForm(forms.ModelForm):
         # и история у экрана, бота и формы одни (правило 4).
         if данные.get("последний_раз"):
             показание = данные.get("показание_тогда")
-            Completion.objects.create(
-                obligation=дело,
-                date=данные["последний_раз"],
-                meter_value=показание,
-                done_by=self.user,
-            )
+            if данные["последний_раз"] == self._дата_последней():
+                # Дата не менялась — это та же отметка; разве что
+                # к ней дописали показание.
+                if показание is not None and показание != self._последняя.meter_value:
+                    self._последняя.meter_value = показание
+                    self._последняя.save(update_fields=["meter_value"])
+                else:
+                    показание = None  # записывать нечего
+            else:
+                Completion.objects.create(
+                    obligation=дело,
+                    date=данные["последний_раз"],
+                    meter_value=показание,
+                    done_by=self.user,
+                )
             if показание is not None and дело.meter:
                 MeterReading.objects.get_or_create(
                     meter=дело.meter,
@@ -386,6 +420,10 @@ class ObligationForm(forms.ModelForm):
                 )
         self._записать_текущее_показание(дело, данные.get("текущее_показание"))
         return дело
+
+    def _дата_последней(self):
+        """Дата последней отметки, подставленная в форму (None у нового)."""
+        return self._последняя.date if self._последняя else None
 
     def _записать_текущее_показание(self, дело, значение):
         """Текущее показание — той же функцией, что кнопка на главной.
@@ -421,7 +459,7 @@ class CompletionForm(forms.ModelForm):
             "note": "заметка",
         }
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
+            "date": календарь(),
             "note": forms.Textarea(attrs={"rows": 2}),
         }
 
@@ -453,7 +491,7 @@ class PersonForm(forms.ModelForm):
             "notes": "заметки",
         }
         widgets = {
-            "birth_date": forms.DateInput(attrs={"type": "date"}),
+            "birth_date": календарь(),
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -488,7 +526,7 @@ class MeterReadingForm(forms.ModelForm):
         model = MeterReading
         fields = ["value", "date"]
         labels = {"value": "показание", "date": "на дату"}
-        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
+        widgets = {"date": календарь()}
 
 
 class ВыборЗначка(forms.RadioSelect):

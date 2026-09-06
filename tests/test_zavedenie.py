@@ -510,6 +510,35 @@ def test_kroshki_formy_pravki_idut_cherez_razdel_i_delo(
 
 
 @pytest.mark.django_db
+def test_posledniy_raz_pokazyvaet_otmetku_i_ne_plodit_dubli(
+    вошедший, дело_со_счётчиком
+):
+    """Журнал мелких правок 2026-09-06: «когда делали последний раз»
+    заполнено последней отметкой; без изменений дубля нет, показание
+    дописывается к той же отметке, новая дата — новая отметка."""
+    дело = дело_со_счётчиком
+    Completion.objects.create(obligation=дело, date=дней_назад(6))
+
+    текст = вошедший.get(f"/obligation/{дело.pk}/edit/").content.decode()
+    # дата в формате календаря браузера (ISO), а не «31.08.2026»
+    assert f'name="последний_раз" value="{дней_назад(6).isoformat()}"' in текст
+
+    _правка(вошедший, дело, последний_раз=дней_назад(6).isoformat())
+    assert дело.completions.count() == 1  # дубля нет
+
+    _правка(
+        вошедший, дело,
+        последний_раз=дней_назад(6).isoformat(), показание_тогда="118000",
+    )
+    [отметка] = дело.completions.all()
+    assert отметка.meter_value == Decimal("118000")  # дописано к той же
+    assert дело.meter.readings.filter(date=дней_назад(6)).exists()
+
+    _правка(вошедший, дело, последний_раз=дней_назад(1).isoformat())
+    assert дело.completions.count() == 2  # новая дата — новая отметка
+
+
+@pytest.mark.django_db
 def test_sohranenie_bez_pravok_ne_plodit_pokazaniya(вошедший, дело_со_счётчиком):
     """Правило 1: равное последнему не пишется, изменённое — пишется."""
     счётчик = дело_со_счётчиком.meter
