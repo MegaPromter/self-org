@@ -26,6 +26,18 @@
     padding-bottom: 0.6rem; margin-bottom: 1rem;
   }
   header h1 { font-size: 1.15rem; font-weight: 600; margin: 0; }
+  /* Название системы — ссылка на главную; общий серый стиль ссылок
+     шапки на него не распространяется (заметка «Хлебные крошки»). */
+  header h1 a { color: inherit; font-size: inherit; text-decoration: none; }
+  header h1 a:hover { text-decoration: underline; }
+  /* Крошки: путь от главной по структуре данных, последний элемент —
+     текущая страница, без ссылки. На телефоне строка переносится. */
+  .крошки {
+    font-size: 0.85rem; color: var(--серый); margin: 0 0 0.5rem;
+    overflow-wrap: anywhere;
+  }
+  .крошки a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--рамка); }
+  .крошки .разд { margin: 0 0.35rem; opacity: 0.6; }
   header a, header button.ссылка {
     color: var(--серый); font-size: 0.85rem; text-decoration: none;
     background: none; border: none; cursor: pointer; padding: 0;
@@ -400,7 +412,7 @@
 <body>
 <div class="страница">
   <header>
-    <h1>Self-org</h1>
+    <h1><a href="{% url 'home' %}">Self-org</a></h1>
     <div>
       {% if user.is_authenticated %}
         {{ user.get_username }} ·
@@ -421,7 +433,10 @@
       {% include "core/_сводка.html" %}
       {% include "core/_меню.html" %}
     {% endif %}
-    <div class="содержимое">{% block содержимое %}{% endblock %}</div>
+    <div class="содержимое">
+      {% block крошки %}{% endblock %}
+      {% block содержимое %}{% endblock %}
+    </div>
     {% if меню %}{% include "core/_счётчики.html" %}{% endif %}
   </div>
 </div>

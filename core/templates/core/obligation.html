@@ -2,6 +2,10 @@
 {% extends "core/base.html" %}
 {% block title %}{{ обязательство.name }} — Self-org{% endblock %}
 
+{% block крошки %}
+<nav class="крошки"><a href="{% url 'home' %}">Главная</a><span class="разд">›</span>{% with раздел=обязательство.effective_category %}{% if раздел %}<a href="{% url 'section' раздел.pk %}">{{ раздел.name }}</a>{% else %}<a href="{% url 'all_tasks' %}">Все дела</a>{% endif %}{% endwith %}<span class="разд">›</span><span>{{ обязательство.name }}</span></nav>
+{% endblock %}
+
 {% block содержимое %}
 <div class="шапка-раздела">
   <span class="название">{{ обязательство.name }}</span>

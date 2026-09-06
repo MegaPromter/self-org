@@ -51,6 +51,23 @@ def машина(db):
 
 
 @pytest.mark.django_db
+def test_kroshki_i_zagolovok_vedut_nazad(вошедший, машина):
+    """Заметка «Хлебные крошки»: «Self-org» — ссылка на главную,
+    над страницей счётчика — путь до неё, последний элемент без ссылки."""
+    предмет, счётчик = машина
+    текст = вошедший.get(f"/meter/{счётчик.pk}/").content.decode()
+    assert '<h1><a href="/">Self-org</a></h1>' in текст
+    assert (
+        '<nav class="крошки"><a href="/">Главная</a><span class="разд">›</span>'
+        '<a href="/catalog/">Справочники</a><span class="разд">›</span>'
+        f'<a href="/item/{предмет.pk}/">Kia Rio</a><span class="разд">›</span>'
+        "<span>Пробег</span></nav>"
+    ) in текст
+    # На главной крошек нет — она и есть начало пути.
+    assert 'class="крошки"' not in вошедший.get("/").content.decode()
+
+
+@pytest.mark.django_db
 def test_spravochniki_pokazyvayut_vsyo_zavedyonnoe(вошедший, машина):
     Person.objects.create(name="Оля", birth_date=datetime.date(1985, 9, 14))
     текст = вошедший.get("/catalog/").content.decode()

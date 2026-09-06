@@ -2,6 +2,10 @@
 {% extends "core/base.html" %}
 {% block title %}{{ название }} — Self-org{% endblock %}
 
+{% block крошки %}
+<nav class="крошки"><a href="{% url 'home' %}">Главная</a><span class="разд">›</span><span>{{ название }}</span></nav>
+{% endblock %}
+
 {% block содержимое %}
 <div class="шапка-раздела">
   <span class="слева">

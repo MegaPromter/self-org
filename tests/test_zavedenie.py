@@ -492,6 +492,24 @@ def test_forma_pravki_pokazyvaet_edinicu_v_spiske_i_poslednee_pokazanie(
 
 
 @pytest.mark.django_db
+def test_kroshki_formy_pravki_idut_cherez_razdel_i_delo(
+    вошедший, дело_со_счётчиком
+):
+    """Заметка «Хлебные крошки»: раздел берётся у предмета, «← назад» на месте."""
+    дело = дело_со_счётчиком
+    дело.item.category = Category.objects.get(name="Транспорт")
+    дело.item.save()
+    текст = вошедший.get(f"/obligation/{дело.pk}/edit/").content.decode()
+    транспорт = дело.item.category
+    assert (
+        f'<a href="/section/{транспорт.pk}/">Транспорт</a><span class="разд">›</span>'
+        f'<a href="/obligation/{дело.pk}/">Замена ДВС</a><span class="разд">›</span>'
+        "<span>Правка</span></nav>"
+    ) in текст
+    assert "← назад" in текст
+
+
+@pytest.mark.django_db
 def test_sohranenie_bez_pravok_ne_plodit_pokazaniya(вошедший, дело_со_счётчиком):
     """Правило 1: равное последнему не пишется, изменённое — пишется."""
     счётчик = дело_со_счётчиком.meter

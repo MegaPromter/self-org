@@ -2,6 +2,10 @@
 {% extends "core/base.html" %}
 {% block title %}Справочники — Self-org{% endblock %}
 
+{% block крошки %}
+<nav class="крошки"><a href="{% url 'home' %}">Главная</a><span class="разд">›</span><span>Справочники</span></nav>
+{% endblock %}
+
 {% block содержимое %}
 <div class="шапка-раздела">
   <span class="название">Справочники</span>
