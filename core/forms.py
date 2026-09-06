@@ -9,11 +9,12 @@
 проверяет сама модель (`Obligation.clean`).
 """
 import datetime
-import re
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.urls import reverse
+from django.utils.html import format_html
 
 from . import actions
 from .models import (
@@ -84,18 +85,6 @@ class ObligationForm(forms.ModelForm):
         label="…или новый человек",
         max_length=200,
         required=False,
-    )
-    новый_счётчик = forms.CharField(
-        label="название нового счётчика",
-        max_length=200,
-        required=False,
-        help_text="Словом, не числом: пробег, моточасы, вода холодная.",
-    )
-    единица_счётчика = forms.CharField(
-        label="в чём измеряется",
-        max_length=50,
-        required=False,
-        help_text="км, м³, литры, часы…",
     )
     годовщина = forms.CharField(
         label="день и месяц",
@@ -183,6 +172,12 @@ class ObligationForm(forms.ModelForm):
         # у существующего счётчика не показывается (пункт 2).
         self.fields["meter"].label_from_instance = (
             lambda м: f"{м.name} ({м.unit}) — {м.item}"
+        )
+        # Счётчик из формы не создаётся (заметка «…без создания
+        # на лету»): редкий случай, для него есть справочники.
+        self.fields["meter"].help_text = format_html(
+            'Нет нужного счётчика? <a href="{}">Создайте его в справочниках</a>.',
+            reverse("meter_new"),
         )
         # Предупреждение о «поехавшем назад» показании — для экрана.
         self.предупреждение = ""
@@ -312,35 +307,18 @@ class ObligationForm(forms.ModelForm):
                 )
                 self.instance.annual_day, self.instance.annual_month = день, месяц
 
-        if нужен_счётчик:
-            if not данные.get("meter") and not данные.get("новый_счётчик"):
-                self.add_error(
-                    "meter", "Выберите счётчик или введите название нового."
-                )
-            if данные.get("новый_счётчик"):
-                # Правило 4: «118400» — это показание, а не название.
-                if re.fullmatch(r"[\d\s.,]+", данные["новый_счётчик"]):
-                    self.add_error(
-                        "новый_счётчик",
-                        "Это похоже на показание, а не на название. "
-                        "Название — словом: пробег, моточасы. Показание — "
-                        "в поле «текущее показание».",
-                    )
-                if not данные.get("единица_счётчика"):
-                    self.add_error(
-                        "единица_счётчика",
-                        "Укажите, в чём измеряется: км, м³, литры…",
-                    )
-                if not (данные.get("item") or данные.get("новый_предмет")):
-                    self.add_error(
-                        "новый_предмет",
-                        "Счётчик принадлежит предмету — выберите его "
-                        "или введите новый.",
-                    )
+        if нужен_счётчик and not данные.get("meter"):
+            self.add_error(
+                "meter",
+                format_html(
+                    'Выберите счётчик. Нет нужного — '
+                    '<a href="{}">создайте его в справочниках</a>.',
+                    reverse("meter_new"),
+                ),
+            )
 
-        есть_счётчик = данные.get("meter") or данные.get("новый_счётчик")
         for поле in ("показание_тогда", "текущее_показание"):
-            if данные.get(поле) is not None and not есть_счётчик:
+            if данные.get(поле) is not None and not данные.get("meter"):
                 self.add_error(
                     поле, "Показание записывать некуда — у дела нет счётчика."
                 )
@@ -355,7 +333,6 @@ class ObligationForm(forms.ModelForm):
         """
         super()._post_clean()
         отложено = {
-            "meter": self.data.get("новый_счётчик"),
             "item": self.data.get("новый_предмет"),
             "person": self.data.get("новый_человек"),
             "annual_day": self.data.get("годовщина"),
@@ -384,12 +361,6 @@ class ObligationForm(forms.ModelForm):
         if данные.get("новый_человек"):
             дело.person = Person.objects.create(
                 name=данные["новый_человек"].strip()
-            )
-        if данные.get("новый_счётчик"):
-            дело.meter = Meter.objects.create(
-                item=дело.item,
-                name=данные["новый_счётчик"].strip(),
-                unit=данные["единица_счётчика"].strip(),
             )
         if self.user and not дело.owner_id:
             дело.owner = self.user

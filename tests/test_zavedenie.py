@@ -41,19 +41,21 @@ def вошедший(client, хозяин):
 
 
 @pytest.mark.django_db
-def test_novoe_delo_sozdayot_predmet_schetchik_i_schitaet_srok(
+def test_novoe_delo_so_schetchikom_iz_spravochnika_schitaet_srok(
     вошедший, хозяин
 ):
+    """Счётчик берётся из справочника (заметка «…без создания на лету»)."""
     транспорт = Category.objects.get(name="Транспорт")
+    предмет = Item.objects.create(name="Kia Rio", category=транспорт)
+    счётчик = Meter.objects.create(item=предмет, name="Пробег", unit="км")
     ответ = вошедший.post(
         "/new/",
         {
             "name": "Замена масла",
             "category": транспорт.pk,
-            "новый_предмет": "Kia Rio",
+            "item": предмет.pk,
             "способ": "счётчик",
-            "новый_счётчик": "Пробег",
-            "единица_счётчика": "км",
+            "meter": счётчик.pk,
             "meter_interval": "10000",
             "последний_раз": дней_назад(100).isoformat(),
             "показание_тогда": "182000",
@@ -65,9 +67,7 @@ def test_novoe_delo_sozdayot_predmet_schetchik_i_schitaet_srok(
 
     дело = Obligation.objects.get(name="Замена масла")
     assert дело.owner == хозяин
-    assert дело.item.name == "Kia Rio"
-    assert дело.item.category == транспорт  # раздел достался предмету
-    assert дело.meter.name == "Пробег" and дело.meter.unit == "км"
+    assert дело.item == предмет and дело.meter == счётчик
     assert дело.completions.count() == 1  # «когда делали последний раз»
     assert MeterReading.objects.filter(meter=дело.meter).count() == 1
 
@@ -396,16 +396,20 @@ def test_u_razovogo_dela_pervyy_srok_ne_zapisyvaetsya(вошедший):
 
 
 @pytest.mark.django_db
-def test_nazvanie_schetchika_iz_cifr_ne_prinimaetsya(вошедший):
-    """Правило 4: «118400» — показание, а не название; ничего не создано."""
+def test_forma_ne_sozdayot_schetchik_i_vedyot_v_spravochniki(вошедший):
+    """Заметка «…без создания на лету»: полей нового счётчика нет,
+    без выбранного счётчика — ошибка со ссылкой, дело не создано."""
+    текст = вошедший.get("/new/").content.decode()
+    assert 'name="новый_счётчик"' not in текст
+    assert 'name="единица_счётчика"' not in текст
+    assert "Создайте его в справочниках" in текст and "/meter/new/" in текст
+
     ответ = вошедший.post(
         "/new/",
         {
             "name": "Замена ДВС",
             "новый_предмет": "Hyundai Tucson",
             "способ": "счётчик",
-            "новый_счётчик": "118 400",
-            "единица_счётчика": "км",
             "meter_interval": "6000",
             "soon_threshold_percent": "70",
             "overdue_repeat_days": "7",
@@ -413,10 +417,9 @@ def test_nazvanie_schetchika_iz_cifr_ne_prinimaetsya(вошедший):
     )
     assert ответ.status_code == 200
     текст = ответ.content.decode()
-    assert "похоже на показание" in текст
-    assert 'value="118 400"' in текст  # введённое не потерялось
-    assert not Meter.objects.exists()
+    assert "Выберите счётчик" in текст and "/meter/new/" in текст
     assert not Obligation.objects.exists()
+    assert not Item.objects.filter(name="Hyundai Tucson").exists()
 
 
 @pytest.mark.django_db
@@ -424,14 +427,15 @@ def test_tekushchee_pokazanie_zapisyvaetsya_segodnyashnim_chislom(
     вошедший,
 ):
     """Правило 1: текущее показание — запись в истории датой сегодня."""
+    предмет = Item.objects.create(name="Hyundai Tucson")
+    счётчик = Meter.objects.create(item=предмет, name="пробег", unit="км")
     ответ = вошедший.post(
         "/new/",
         {
             "name": "Замена ДВС",
-            "новый_предмет": "Hyundai Tucson",
+            "item": предмет.pk,
             "способ": "счётчик",
-            "новый_счётчик": "пробег",
-            "единица_счётчика": "км",
+            "meter": счётчик.pk,
             "meter_interval": "6000",
             "текущее_показание": "118400",
             "soon_threshold_percent": "70",
@@ -439,7 +443,6 @@ def test_tekushchee_pokazanie_zapisyvaetsya_segodnyashnim_chislom(
         },
     )
     assert ответ.status_code == 302
-    счётчик = Meter.objects.get(name="пробег")
     [показание] = счётчик.readings.all()
     assert (показание.value, показание.date) == (Decimal("118400"), СЕГОДНЯ)
     # Правило 6: где счётчик сейчас — известно, когда делали — нет.
