@@ -12,6 +12,12 @@ dependencies = [
     "python-telegram-bot>=21",
 ]
 
+# Какие папки считать кодом программы. Без этого установщик видит
+# в корне несколько пакетов (config, core, tests) и отказывается
+# собирать образ Docker.
+[tool.setuptools]
+packages = ["config", "core"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
