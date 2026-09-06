@@ -46,8 +46,12 @@
   <div data-часть="счётчик">
     {% include "core/_поле.html" with поле=форма.meter %}
     {% include "core/_поле.html" with поле=форма.новый_счётчик %}
-    {% include "core/_поле.html" with поле=форма.единица_счётчика %}
+    {# Единица нужна только новому счётчику — у выбранного она уже есть. #}
+    <div data-часть="новый-счётчик">
+      {% include "core/_поле.html" with поле=форма.единица_счётчика %}
+    </div>
     {% include "core/_поле.html" with поле=форма.meter_interval %}
+    {% include "core/_поле.html" with поле=форма.текущее_показание %}
   </div>
 
   <h2>К чему относится</h2>
@@ -97,6 +101,7 @@
     var способы = document.querySelectorAll('input[name="способ"]');
     var повторы = document.querySelectorAll('input[name="повтор_вид"]');
     var галочка = document.getElementById('id_ещё_по_счётчику');
+    var выборСчётчика = document.getElementById('id_meter');
     if (!способы.length) return;
     function выбрано(узлы) {
       for (var i = 0; i < узлы.length; i++) {
@@ -121,10 +126,13 @@
         && способ !== 'когда_получится');
       показать('счётчик', способ === 'счётчик'
         || (повторяется || способ === 'дата') && галочка && галочка.checked);
+      // Выбран существующий счётчик — единицу спрашивать не у кого.
+      показать('новый-счётчик', !(выборСчётчика && выборСчётчика.value));
     }
     способы.forEach(function (у) { у.addEventListener('change', обновить); });
     повторы.forEach(function (у) { у.addEventListener('change', обновить); });
     if (галочка) галочка.addEventListener('change', обновить);
+    if (выборСчётчика) выборСчётчика.addEventListener('change', обновить);
     обновить();
   })();
 </script>

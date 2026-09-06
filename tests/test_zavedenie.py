@@ -390,3 +390,122 @@ def test_u_razovogo_dela_pervyy_srok_ne_zapisyvaetsya(вошедший):
     )
     дело = Obligation.objects.get(name="Забрать посылку")
     assert дело.start_date is None
+
+
+# --- Заметка «Счётчик в форме дела: подписи и текущее показание» -----------
+
+
+@pytest.mark.django_db
+def test_nazvanie_schetchika_iz_cifr_ne_prinimaetsya(вошедший):
+    """Правило 4: «118400» — показание, а не название; ничего не создано."""
+    ответ = вошедший.post(
+        "/new/",
+        {
+            "name": "Замена ДВС",
+            "новый_предмет": "Hyundai Tucson",
+            "способ": "счётчик",
+            "новый_счётчик": "118 400",
+            "единица_счётчика": "км",
+            "meter_interval": "6000",
+            "soon_threshold_percent": "70",
+            "overdue_repeat_days": "7",
+        },
+    )
+    assert ответ.status_code == 200
+    текст = ответ.content.decode()
+    assert "похоже на показание" in текст
+    assert 'value="118 400"' in текст  # введённое не потерялось
+    assert not Meter.objects.exists()
+    assert not Obligation.objects.exists()
+
+
+@pytest.mark.django_db
+def test_tekushchee_pokazanie_zapisyvaetsya_segodnyashnim_chislom(
+    вошедший,
+):
+    """Правило 1: текущее показание — запись в истории датой сегодня."""
+    ответ = вошедший.post(
+        "/new/",
+        {
+            "name": "Замена ДВС",
+            "новый_предмет": "Hyundai Tucson",
+            "способ": "счётчик",
+            "новый_счётчик": "пробег",
+            "единица_счётчика": "км",
+            "meter_interval": "6000",
+            "текущее_показание": "118400",
+            "soon_threshold_percent": "70",
+            "overdue_repeat_days": "7",
+        },
+    )
+    assert ответ.status_code == 302
+    счётчик = Meter.objects.get(name="пробег")
+    [показание] = счётчик.readings.all()
+    assert (показание.value, показание.date) == (Decimal("118400"), СЕГОДНЯ)
+    # Правило 6: где счётчик сейчас — известно, когда делали — нет.
+    дело = Obligation.objects.get(name="Замена ДВС")
+    assert compute_status(дело, СЕГОДНЯ).state is State.NO_DATA
+
+
+@pytest.fixture
+def дело_со_счётчиком(хозяин):
+    предмет = Item.objects.create(name="Hyundai Tucson")
+    счётчик = Meter.objects.create(item=предмет, name="пробег", unit="км")
+    MeterReading.objects.create(
+        meter=счётчик, value=Decimal("118400"), date=дней_назад(3)
+    )
+    return Obligation.objects.create(
+        name="Замена ДВС",
+        item=предмет,
+        rule_kind=Obligation.RuleKind.METER,
+        meter=счётчик,
+        meter_interval=Decimal("6000"),
+        owner=хозяин,
+    )
+
+
+def _правка(client, дело, **поля):
+    данные = {
+        "name": дело.name,
+        "способ": "счётчик",
+        "item": дело.item.pk,
+        "meter": дело.meter.pk,
+        "meter_interval": "6000",
+        "soon_threshold_percent": "70",
+        "overdue_repeat_days": "7",
+    }
+    данные.update(поля)
+    return client.post(f"/obligation/{дело.pk}/edit/", данные, follow=True)
+
+
+@pytest.mark.django_db
+def test_forma_pravki_pokazyvaet_edinicu_v_spiske_i_poslednee_pokazanie(
+    вошедший, дело_со_счётчиком
+):
+    """Пункты 2–3: единица в списке выбора, последнее показание в поле."""
+    текст = вошедший.get(f"/obligation/{дело_со_счётчиком.pk}/edit/").content.decode()
+    assert "пробег (км) — Hyundai Tucson" in текст
+    assert 'name="текущее_показание"' in текст and 'value="118400.00"' in текст
+
+
+@pytest.mark.django_db
+def test_sohranenie_bez_pravok_ne_plodit_pokazaniya(вошедший, дело_со_счётчиком):
+    """Правило 1: равное последнему не пишется, изменённое — пишется."""
+    счётчик = дело_со_счётчиком.meter
+    _правка(вошедший, дело_со_счётчиком, текущее_показание="118400")
+    assert счётчик.readings.count() == 1
+    _правка(вошедший, дело_со_счётчиком, текущее_показание="118900")
+    assert счётчик.readings.count() == 2
+    assert счётчик.readings.first().value == Decimal("118900")
+
+
+@pytest.mark.django_db
+def test_pokazanie_menshe_predydushchego_zapisyvaetsya_s_preduprezhdeniem(
+    вошедший, дело_со_счётчиком
+):
+    """Правило 2: как у кнопки «Ввести показание» — пишем и предупреждаем."""
+    ответ = _правка(вошедший, дело_со_счётчиком, текущее_показание="100000")
+    assert дело_со_счётчиком.meter.readings.count() == 2
+    текст = ответ.content.decode()
+    # тысячи разделяются неразрывным пробелом (short_number)
+    assert "меньше предыдущего" in текст and "118 400 км" in текст

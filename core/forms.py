@@ -9,11 +9,13 @@
 проверяет сама модель (`Obligation.clean`).
 """
 import datetime
+import re
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from . import actions
 from .models import (
     Category,
     Completion,
@@ -24,6 +26,7 @@ from .models import (
     Obligation,
     Person,
 )
+from .status import short_number
 from .значки import НАБОР as ЗНАЧКИ
 
 
@@ -83,10 +86,10 @@ class ObligationForm(forms.ModelForm):
         required=False,
     )
     новый_счётчик = forms.CharField(
-        label="…или новый счётчик",
+        label="название нового счётчика",
         max_length=200,
         required=False,
-        help_text="Например: пробег, вода холодная, моточасы.",
+        help_text="Словом, не числом: пробег, моточасы, вода холодная.",
     )
     единица_счётчика = forms.CharField(
         label="в чём измеряется",
@@ -114,6 +117,16 @@ class ObligationForm(forms.ModelForm):
         max_digits=12,
         decimal_places=2,
         required=False,
+    )
+    текущее_показание = forms.DecimalField(
+        label="текущее показание",
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        help_text=(
+            "Что на счётчике сейчас, например 118 400. "
+            "Запишется как показание на сегодня."
+        ),
     )
 
     class Meta:
@@ -166,6 +179,19 @@ class ObligationForm(forms.ModelForm):
         self.fields["category"].queryset = Category.objects.all()
         self.fields["item"].queryset = Item.objects.all()
         self.fields["meter"].queryset = Meter.objects.select_related("item")
+        # Единица видна прямо в списке — поле «в чём измеряется»
+        # у существующего счётчика не показывается (пункт 2).
+        self.fields["meter"].label_from_instance = (
+            lambda м: f"{м.name} ({м.unit}) — {м.item}"
+        )
+        # Предупреждение о «поехавшем назад» показании — для экрана.
+        self.предупреждение = ""
+        if self.instance.pk and self.instance.meter_id:
+            последнее = self.instance.meter.readings.order_by(
+                "-date", "-id"
+            ).first()
+            if последнее:
+                self.fields["текущее_показание"].initial = последнее.value
         # Ежегодные месяц и день собираем из одного поля «14.09».
         if self.instance.pk and self.instance.annual_month:
             self.fields["годовщина"].initial = (
@@ -292,6 +318,14 @@ class ObligationForm(forms.ModelForm):
                     "meter", "Выберите счётчик или введите название нового."
                 )
             if данные.get("новый_счётчик"):
+                # Правило 4: «118400» — это показание, а не название.
+                if re.fullmatch(r"[\d\s.,]+", данные["новый_счётчик"]):
+                    self.add_error(
+                        "новый_счётчик",
+                        "Это похоже на показание, а не на название. "
+                        "Название — словом: пробег, моточасы. Показание — "
+                        "в поле «текущее показание».",
+                    )
                 if not данные.get("единица_счётчика"):
                     self.add_error(
                         "единица_счётчика",
@@ -304,13 +338,12 @@ class ObligationForm(forms.ModelForm):
                         "или введите новый.",
                     )
 
-        if данные.get("показание_тогда") is not None and not (
-            данные.get("meter") or данные.get("новый_счётчик")
-        ):
-            self.add_error(
-                "показание_тогда",
-                "Показание записывать некуда — у дела нет счётчика.",
-            )
+        есть_счётчик = данные.get("meter") or данные.get("новый_счётчик")
+        for поле in ("показание_тогда", "текущее_показание"):
+            if данные.get(поле) is not None and not есть_счётчик:
+                self.add_error(
+                    поле, "Показание записывать некуда — у дела нет счётчика."
+                )
         return данные
 
     def _post_clean(self):
@@ -380,7 +413,28 @@ class ObligationForm(forms.ModelForm):
                     date=данные["последний_раз"],
                     defaults={"value": показание},
                 )
+        self._записать_текущее_показание(дело, данные.get("текущее_показание"))
         return дело
+
+    def _записать_текущее_показание(self, дело, значение):
+        """Текущее показание — той же функцией, что кнопка на главной.
+
+        Равное последнему не пишем: форма открыта-сохранена без правок
+        не должна плодить записи (правило 1). Меньшее — пишем,
+        но запоминаем предупреждение для экрана (правило 2).
+        """
+        if значение is None or not дело.meter:
+            return
+        последнее = дело.meter.readings.order_by("-date", "-id").first()
+        if последнее and последнее.value == значение:
+            return
+        _, подозрительное = actions.add_reading(дело.meter, значение)
+        if подозрительное:
+            self.предупреждение = (
+                f"Текущее показание меньше предыдущего "
+                f"({short_number(подозрительное.value)} {дело.meter.unit}) — "
+                f"проверьте, не опечатка ли."
+            )
 
 
 class CompletionForm(forms.ModelForm):

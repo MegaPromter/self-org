@@ -870,6 +870,8 @@ def obligation_new(request):
         if форма.is_valid():
             дело = форма.save()
             messages.success(request, f"«{дело.name}» — дело заведено.")
+            if форма.предупреждение:
+                messages.success(request, форма.предупреждение)
             return _вернуться(request, reverse("obligation", args=[дело.pk]))
     else:
         форма = ObligationForm(initial=начальные, user=request.user)
@@ -888,6 +890,8 @@ def obligation_edit(request, pk):
         if форма.is_valid():
             форма.save()
             messages.success(request, f"«{дело.name}» — изменения сохранены.")
+            if форма.предупреждение:
+                messages.success(request, форма.предупреждение)
             return _вернуться(request, reverse("obligation", args=[дело.pk]))
     else:
         форма = ObligationForm(instance=дело, user=request.user)
